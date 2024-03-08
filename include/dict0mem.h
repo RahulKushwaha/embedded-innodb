@@ -445,14 +445,14 @@ struct dict_table_struct {
   hash_node_t id_hash;
 
   /** List of indexes of the table */
-  UT_LIST_BASE_NODE_T(dict_index_t) indexes;
+  UT_LIST_BASE_NODE_T(dict_index_t, indexes) indexes;
 
   /** List of foreign key constraints in the table; these refer to columns
   in other tables */
-  UT_LIST_BASE_NODE_T(dict_foreign_t) foreign_list;
+  UT_LIST_BASE_NODE_T(dict_foreign_t, foreign_list) foreign_list;
 
   /** List of foreign key constraints which refer to this table */
-  UT_LIST_BASE_NODE_T(dict_foreign_t) referenced_list;
+  UT_LIST_BASE_NODE_T(dict_foreign_t, referenced_list) referenced_list;
 
   /** Node of the LRU list of tables */
   UT_LIST_NODE_T(dict_table_t) table_LRU;
@@ -467,7 +467,7 @@ struct dict_table_struct {
   ulint n_foreign_key_checks_running;
 
   /** List of locks on the table */
-  UT_LIST_BASE_NODE_T(lock_t) locks;
+  UT_LIST_BASE_NODE_T_EXTERN(lock_t, trx_locks) locks;
 
 #ifdef UNIV_DEBUG
   /** This field is used to specify in simulations tables which are so big

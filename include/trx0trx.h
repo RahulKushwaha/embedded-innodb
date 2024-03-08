@@ -25,12 +25,12 @@ Created 3/26/1996 Heikki Tuuri
 
 #include "dict0types.h"
 #include "innodb0types.h"
+#include "trx0types.h"
 #include "lock0types.h"
 #include "mem0mem.h"
 #include "que0types.h"
 #include "read0types.h"
 #include "srv0srv.h"
-#include "trx0types.h"
 #include "trx0xa.h"
 #include "usr0types.h"
 #include "ut0vec.h"
@@ -44,18 +44,17 @@ extern ulint trx_n_transactions;
 
 /** Set detailed error message for the transaction. */
 
-void trx_set_detailed_error(
-  trx_t *trx, /*!< in: transaction struct */
-  const char *msg
-); /*!< in: detailed error message */
+void trx_set_detailed_error(trx_t *trx,       /*!< in: transaction struct */
+                            const char *msg); /*!< in: detailed error message */
 /** Retrieves the error_info field from a trx.
 @return	the error info */
-inline const dict_index_t *trx_get_error_info(const trx_t *trx); /*!< in: trx object */
+inline const dict_index_t *
+trx_get_error_info(const trx_t *trx); /*!< in: trx object */
 /** Creates and initializes a transaction object.
 @return	own: the transaction */
 
 trx_t *trx_create(sess_t *sess) /*!< in: session */
-  __attribute__((nonnull));
+__attribute__((nonnull));
 /** Creates a transaction object.
 @return	own: transaction object */
 
@@ -77,24 +76,22 @@ already exist when this function is called, because the lists of
 transactions to be rolled back or cleaned up are built based on the
 undo log lists. */
 
-void trx_lists_init_at_db_start(ib_recovery_t recovery); /*!< in: recovery flag */
+void trx_lists_init_at_db_start(
+    ib_recovery_t recovery); /*!< in: recovery flag */
 /** Starts a new transaction.
 @return true if success, false if the rollback segment could not
 support this many transactions */
 
-bool trx_start(
-  trx_t *trx, /*!< in: transaction */
-  ulint rseg_id
-); /*!< in: rollback segment id; if ULINT_UNDEFINED
+bool trx_start(trx_t *trx,     /*!< in: transaction */
+               ulint rseg_id); /*!< in: rollback segment id; if ULINT_UNDEFINED
                               is passed, the system chooses the rollback
                               segment automatically in a round-robin fashion */
 /** Starts a new transaction.
 @return	true */
 
 bool trx_start_low(
-  trx_t *trx, /*!< in: transaction */
-  ulint rseg_id
-); /*!< in: rollback segment id; if ULINT_UNDEFINED
+    trx_t *trx,     /*!< in: transaction */
+    ulint rseg_id); /*!< in: rollback segment id; if ULINT_UNDEFINED
                    is passed, the system chooses the rollback segment
                    automatically in a round-robin fashion */
 /** Starts the transaction if it is not yet started. */
@@ -116,17 +113,16 @@ their transaction objects for a recovery. This function is used to
 recover any X/Open XA distributed transactions
 @return	number of prepared transactions */
 
-int trx_recover(
-  XID *xid_list, /*!< in/out: prepared transactions */
-  ulint len
-); /*!< in: number of slots in xid_list */
+int trx_recover(XID *xid_list, /*!< in/out: prepared transactions */
+                ulint len);    /*!< in: number of slots in xid_list */
 #ifdef WITH_XOPEN
 /** This function is used to find one X/Open XA distributed transaction
 which is in the prepared state
 @return	trx or NULL */
 
-trx_t *trx_get_trx_by_xid(XID *xid); /*!< in: X/Open XA transaction identification */
-#endif                               /* WITH_XOPEN */
+trx_t *
+trx_get_trx_by_xid(XID *xid); /*!< in: X/Open XA transaction identification */
+#endif                        /* WITH_XOPEN */
 /** If required, flushes the log to disk if we called trx_commit_()
 with trx->flush_log_later == true.
 @return	0 or error number */
@@ -149,17 +145,16 @@ void trx_end_lock_wait(trx_t *trx); /*!< in: transaction */
 /** Sends a signal to a trx object. */
 
 void trx_sig_send(
-  trx_t *trx,              /*!< in: trx handle */
-  ulint type,              /*!< in: signal type */
-  ulint sender,            /*!< in: TRX_SIG_SELF or
+    trx_t *trx,              /*!< in: trx handle */
+    ulint type,              /*!< in: signal type */
+    ulint sender,            /*!< in: TRX_SIG_SELF or
                              TRX_SIG_OTHER_SESS */
-  que_thr_t *receiver_thr, /*!< in: query thread which wants the
+    que_thr_t *receiver_thr, /*!< in: query thread which wants the
                              reply, or NULL; if type is
                              TRX_SIG_END_WAIT, this must be NULL */
-  trx_savept_t *savept,    /*!< in: possible rollback savepoint, or
+    trx_savept_t *savept,    /*!< in: possible rollback savepoint, or
                              NULL */
-  que_thr_t **next_thr
-); /*!< in/out: next query thread to run;
+    que_thr_t **next_thr);   /*!< in/out: next query thread to run;
                              if the value which is passed in is
                              a pointer to a NULL pointer, then the
                              calling function can start running
@@ -168,26 +163,21 @@ void trx_sig_send(
 /** Send the reply message when a signal in the queue of the trx has
 been handled. */
 
-void trx_sig_reply(
-  trx_sig_t *sig, /*!< in: signal */
-  que_thr_t **next_thr
-); /*!< in/out: next query thread to run;
+void trx_sig_reply(trx_sig_t *sig,        /*!< in: signal */
+                   que_thr_t **next_thr); /*!< in/out: next query thread to run;
                                           if the value which is passed in is
                                           a pointer to a NULL pointer, then the
                                           calling function can start running
                                           a new query thread */
 /** Removes the signal object from a trx signal queue. */
 
-void trx_sig_remove(
-  trx_t *trx, /*!< in: trx handle */
-  trx_sig_t *sig
-); /*!< in, own: signal */
+void trx_sig_remove(trx_t *trx,      /*!< in: trx handle */
+                    trx_sig_t *sig); /*!< in, own: signal */
 /** Starts handling of a trx signal. */
 
 void trx_sig_start_handle(
-  trx_t *trx, /*!< in: trx handle */
-  que_thr_t **next_thr
-); /*!< in/out: next query thread to run;
+    trx_t *trx,            /*!< in: trx handle */
+    que_thr_t **next_thr); /*!< in/out: next query thread to run;
                            if the value which is passed in is
                            a pointer to a NULL pointer, then the
                            calling function can start running
@@ -201,7 +191,8 @@ void trx_end_signal_handling(trx_t *trx); /*!< in: trx */
 /** Creates a commit command node struct.
 @return	own: commit node struct */
 
-commit_node_t *commit_node_create(mem_heap_t *heap); /*!< in: mem heap where created */
+commit_node_t *
+commit_node_create(mem_heap_t *heap); /*!< in: mem heap where created */
 /** Performs an execution step for a commit type node in a query graph.
 @return	query thread to run next, or NULL */
 
@@ -210,11 +201,9 @@ que_thr_t *trx_commit_step(que_thr_t *thr); /*!< in: query thread */
 /** Prints info about a transaction to the given file. The caller must own the
 kernel mutex. */
 
-void trx_print(
-  ib_stream_t ib_stream, /*!< in: output stream */
-  trx_t *trx,            /*!< in: transaction */
-  ulint max_query_len
-); /*!< in: max query length to print, or
+void trx_print(ib_stream_t ib_stream, /*!< in: output stream */
+               trx_t *trx,            /*!< in: transaction */
+               ulint max_query_len);  /*!< in: max query length to print, or
                                       0 to use the default max length */
 
 /** Type of data dictionary operation */
@@ -234,13 +223,12 @@ typedef enum trx_dict_op {
 
 /** Determine if a transaction is a dictionary operation.
 @return	dictionary operation mode */
-inline enum trx_dict_op trx_get_dict_operation(const trx_t *trx) /*!< in: transaction */
-  __attribute__((pure));
+inline enum trx_dict_op
+trx_get_dict_operation(const trx_t *trx) /*!< in: transaction */
+__attribute__((pure));
 /** Flag a transaction a dictionary operation. */
-inline void trx_set_dict_operation(
-  trx_t *trx, /*!< in/out: transaction */
-  enum trx_dict_op op
-); /*!< in: operation, not
+inline void trx_set_dict_operation(trx_t *trx, /*!< in/out: transaction */
+                                   enum trx_dict_op op); /*!< in: operation, not
                                                          TRX_DICT_OP_NONE */
 
 /** Determines if the currently running transaction has been interrupted.
@@ -260,9 +248,8 @@ that have not.
 @return	<0, 0 or >0; similar to strcmp(3) */
 
 int trx_weight_cmp(
-  const trx_t *a, /*!< in: the first transaction to be compared */
-  const trx_t *b
-); /*!< in: the second transaction to be compared */
+    const trx_t *a,  /*!< in: the first transaction to be compared */
+    const trx_t *b); /*!< in: the second transaction to be compared */
 
 /** Retrieves transacion's id, represented as unsigned long long.
 @return	transaction's id */
@@ -286,7 +273,8 @@ trx_get_que_state_str(). */
 /** Retrieves transaction's que state in a human readable string. The string
 should not be free()'d or modified.
 @return	string in the data segment */
-inline const char *trx_get_que_state_str(const trx_t *trx); /*!< in: transaction */
+inline const char *
+trx_get_que_state_str(const trx_t *trx); /*!< in: transaction */
 
 /** Reset global variables. */
 
@@ -294,18 +282,18 @@ void trx_var_init(void);
 
 /* Signal to a transaction */
 struct trx_sig_struct {
-  unsigned type : 3;   /*!< signal type */
-  unsigned sender : 1; /*!< TRX_SIG_SELF or
+  unsigned type: 3;   /*!< signal type */
+  unsigned sender: 1; /*!< TRX_SIG_SELF or
                        TRX_SIG_OTHER_SESS */
   que_thr_t *receiver; /*!< non-NULL if the sender of the signal
                        wants reply after the operation induced
                        by the signal is completed */
   trx_savept_t savept; /*!< possible rollback savepoint */
   UT_LIST_NODE_T(trx_sig_t)
-  signals; /*!< queue of pending signals to the
+      signals; /*!< queue of pending signals to the
            transaction */
   UT_LIST_NODE_T(trx_sig_t)
-  reply_signals; /*!< list of signals for which the sender
+      reply_signals; /*!< list of signals for which the sender
                  transaction is waiting a reply */
 };
 
@@ -339,25 +327,25 @@ struct trx_struct {
   if we can use the insert buffer for
   them, we set this false */
 #ifdef WITH_XOPEN
-  ulint support_xa;             /*!< normally we do the XA two-phase
+  ulint support_xa;           /*!< normally we do the XA two-phase
                               commit steps, but by setting this to
                               false, one can save CPU time and about
                               150 bytes in the undo log size as then
                               we skip XA steps */
-  ulint flush_log_later;        /* In 2PC, we hold the
+  ulint flush_log_later;      /* In 2PC, we hold the
                               prepare_commit mutex across
                               both phases. In that case, we
                               defer flush of the logs to disk
                               until after we release the
                               mutex. */
-  ulint must_flush_log_later;   /* this flag is set to true in
+  ulint must_flush_log_later; /* this flag is set to true in
                          trx_commit_off_kernel() if
                          flush_log_later was true, and there
                          were modifications by the transaction;
                          in that case we must flush the log
                          in trx_commit() */
-#endif                          /* WITH_XOPEN */
-  ulint duplicates;             /*!< TRX_DUP_IGNORE | TRX_DUP_REPLACE */
+#endif                        /* WITH_XOPEN */
+  ulint duplicates;           /*!< TRX_DUP_IGNORE | TRX_DUP_REPLACE */
   ulint deadlock_mark;          /*!< a mark field used in deadlock
                                 checking algorithm.  */
   trx_dict_op_t dict_operation; /**< @see enum trx_dict_op */
@@ -420,9 +408,9 @@ struct trx_struct {
   in consistent read */
   /*------------------------------*/
   UT_LIST_NODE_T(trx_t)
-  trx_list; /*!< list of transactions */
+      trx_list; /*!< list of transactions */
   UT_LIST_NODE_T(trx_t)
-  client_trx_list; /*!< list of transactions created for
+      client_trx_list; /*!< list of transactions created for
                    client */
   /*------------------------------*/
   enum db_err error_state;        /*!< 0 if no error, otherwise error
@@ -451,11 +439,11 @@ struct trx_struct {
   graph for error processing */
   trx_sig_t sig; /*!< one signal object can be allocated
                  in this space, avoiding mem_alloc */
-  UT_LIST_BASE_NODE_T(trx_sig_t)
-  signals; /*!< queue of processed or pending
+  UT_LIST_BASE_NODE_T(trx_sig_t, signals)
+      signals; /*!< queue of processed or pending
            signals to the trx */
-  UT_LIST_BASE_NODE_T(trx_sig_t)
-  reply_signals; /*!< list of signals sent by the query
+  UT_LIST_BASE_NODE_T(trx_sig_t, reply_signals)
+      reply_signals; /*!< list of signals sent by the query
                  threads of this trx for which a thread
                  is waiting for a reply; if this trx is
                  killed, the reply requests in the list
@@ -472,15 +460,15 @@ struct trx_struct {
   transaction as a victim in deadlock
   resolution, it sets this to true */
   time_t wait_started; /*!< lock wait started at this time */
-  UT_LIST_BASE_NODE_T(que_thr_t)
-  wait_thrs; /*!< query threads belonging to this
+  UT_LIST_BASE_NODE_T_EXTERN(que_thr_t, trx_thrs)
+      wait_thrs; /*!< query threads belonging to this
              trx that are in the QUE_THR_LOCK_WAIT
              state */
   /*------------------------------*/
   mem_heap_t *lock_heap; /*!< memory heap for the locks of the
                          transaction */
-  UT_LIST_BASE_NODE_T(lock_t)
-  trx_locks; /*!< locks reserved by the
+  UT_LIST_BASE_NODE_T_EXTERN(lock_t, trx_locks)
+      trx_locks; /*!< locks reserved by the
              transaction */
   /*------------------------------*/
   mem_heap_t *global_read_view_heap;
@@ -496,8 +484,8 @@ struct trx_struct {
                           same as global_read_view) or read view
                           associated to a cursor */
   /*------------------------------*/
-  UT_LIST_BASE_NODE_T(trx_named_savept_t)
-  trx_savepoints; /*!< savepoints set with SAVEPOINT ...,
+  UT_LIST_BASE_NODE_T_EXTERN(trx_named_savept_t, trx_savepoints)
+      trx_savepoints; /*!< savepoints set with SAVEPOINT ...,
                   oldest first */
   /*------------------------------*/
   mutex_t undo_mutex; /*!< mutex protecting the fields in this
@@ -537,7 +525,10 @@ struct trx_struct {
                             error, or empty. */
 };
 
-#define TRX_MAX_N_THREADS \
+UT_LIST_NODE_GETTER_DEFINITION(trx_t, trx_list);
+UT_LIST_NODE_GETTER_DEFINITION(trx_t, client_trx_list);
+
+#define TRX_MAX_N_THREADS                                                      \
   32 /*!< maximum number of                                                    \
      concurrent threads running a                                              \
      single operation of a                                                     \
@@ -551,14 +542,14 @@ struct trx_struct {
 
 /* Transaction execution states when trx->conc_state == TRX_ACTIVE */
 #define TRX_QUE_RUNNING 0 /*!< transaction is running */
-#define TRX_QUE_LOCK_WAIT \
+#define TRX_QUE_LOCK_WAIT                                                      \
   1                            /*!< transaction is waiting                     \
                                for a lock */
 #define TRX_QUE_ROLLING_BACK 2 /*!< transaction is rolling back */
 #define TRX_QUE_COMMITTING 3   /*!< transaction is committing */
 
 /* Transaction isolation levels (trx->isolation_level) */
-#define TRX_ISO_READ_UNCOMMITTED \
+#define TRX_ISO_READ_UNCOMMITTED                                               \
   0 /*!< dirty read: non-locking                                               \
     SELECTs are performed so that                                              \
     we do not look at a possible                                               \
@@ -568,7 +559,7 @@ struct trx_struct {
     level; otherwise like level                                                \
     2 */
 
-#define TRX_ISO_READ_COMMITTED \
+#define TRX_ISO_READ_COMMITTED                                                 \
   1 /*!< somewhat Oracle-like                                                  \
     isolation, except that in                                                  \
     range UPDATE and DELETE we                                                 \
@@ -582,7 +573,7 @@ struct trx_struct {
     each consistent read reads its                                             \
     own snapshot */
 
-#define TRX_ISO_REPEATABLE_READ \
+#define TRX_ISO_REPEATABLE_READ                                                \
   2 /*!< this is the default;                                                  \
     all consistent reads in the                                                \
     same trx read the same                                                     \
@@ -591,7 +582,7 @@ struct trx_struct {
     in locking reads to block                                                  \
     insertions into gaps */
 
-#define TRX_ISO_SERIALIZABLE \
+#define TRX_ISO_SERIALIZABLE                                                   \
   3 /*!< all plain SELECTs are                                                 \
     converted to LOCK IN SHARE                                                 \
     MODE reads */
@@ -610,11 +601,11 @@ Multiple flags can be combined with bitwise OR. */
 #define TRX_SIG_BREAK_EXECUTION 5
 
 /* Sender types of a signal */
-#define TRX_SIG_SELF \
+#define TRX_SIG_SELF                                                           \
   0 /*!< sent by the session itself, or                                        \
     by an error occurring within this                                          \
     session */
-#define TRX_SIG_OTHER_SESS \
+#define TRX_SIG_OTHER_SESS                                                     \
   1 /*!< sent by another session (which                                        \
     must hold rights to this) */
 

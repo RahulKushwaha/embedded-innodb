@@ -23,6 +23,10 @@ Created 11/11/1995 Heikki Tuuri
 
 #include "buf0flu.h"
 
+#ifdef UNIV_NONINL
+#include "buf0flu.ic"
+#endif
+
 #include "buf0buf.h"
 #include "buf0lru.h"
 #include "buf0rea.h"
@@ -77,7 +81,8 @@ static bool buf_flush_validate_low(void);
 predecessor or nullptr if no predecessor. The ordering is maintained
 on the basis of the <oldest_modification, space, offset> key.
 @return pointer to the predecessor or nullptr if no predecessor. */
-static buf_page_t *buf_flush_insert_in_flush_rbt(buf_page_t *bpage) /*!< in: bpage to be inserted. */
+static buf_page_t *buf_flush_insert_in_flush_rbt(
+    buf_page_t *bpage) /*!< in: bpage to be inserted. */
 {
   buf_page_t *prev = nullptr;
   const ib_rbt_node_t *c_node;
@@ -101,7 +106,8 @@ static buf_page_t *buf_flush_insert_in_flush_rbt(buf_page_t *bpage) /*!< in: bpa
 }
 
 /** Delete a bpage from the flush_rbt. */
-static void buf_flush_delete_from_flush_rbt(buf_page_t *bpage) /*!< in: bpage to be removed. */
+static void buf_flush_delete_from_flush_rbt(
+    buf_page_t *bpage) /*!< in: bpage to be removed. */
 {
 
 #ifdef UNIV_DEBUG
@@ -112,7 +118,7 @@ static void buf_flush_delete_from_flush_rbt(buf_page_t *bpage) /*!< in: bpage to
 #ifdef UNIV_DEBUG
   ret =
 #endif /* UNIV_DEBUG */
-    rbt_delete(buf_pool->flush_rbt, &bpage);
+      rbt_delete(buf_pool->flush_rbt, &bpage);
   ut_ad(ret);
 }
 
@@ -125,10 +131,8 @@ Note that for the purpose of flush_rbt, we only need to order blocks
 on the oldest_modification. The other two fields are used to uniquely
 identify the blocks.
 @return < 0 if b2 < b1, 0 if b2 == b1, > 0 if b2 > b1 */
-static int buf_flush_block_cmp(
-  const void *p1, /*!< in: block1 */
-  const void *p2
-) /*!< in: block2 */
+static int buf_flush_block_cmp(const void *p1, /*!< in: block1 */
+                               const void *p2) /*!< in: block2 */
 {
   int ret;
   const buf_page_t *b1;
@@ -137,8 +141,8 @@ static int buf_flush_block_cmp(
   ut_ad(p1 != nullptr);
   ut_ad(p2 != nullptr);
 
-  b1 = *(const buf_page_t **)p1;
-  b2 = *(const buf_page_t **)p2;
+  b1 = *(const buf_page_t **) p1;
+  b2 = *(const buf_page_t **) p2;
 
   ut_ad(b1 != nullptr);
   ut_ad(b2 != nullptr);
@@ -155,10 +159,10 @@ static int buf_flush_block_cmp(
   }
 
   /* If oldest_modification is same then decide on the space. */
-  ret = (int)(b2->space - b1->space);
+  ret = (int) (b2->space - b1->space);
 
   /* Or else decide ordering on the offset field. */
-  return (ret ? ret : (int)(b2->offset - b1->offset));
+  return (ret ? ret : (int) (b2->offset - b1->offset));
 }
 
 void buf_flush_init_flush_rbt() {
@@ -183,10 +187,9 @@ void buf_flush_free_flush_rbt() {
 
 void buf_flush_insert_into_flush_list(buf_block_t *block) {
   ut_ad(buf_pool_mutex_own());
-  ut_ad(
-    (UT_LIST_GET_FIRST(buf_pool->flush_list) == nullptr) ||
-    (UT_LIST_GET_FIRST(buf_pool->flush_list)->oldest_modification <= block->page.oldest_modification)
-  );
+  ut_ad((UT_LIST_GET_FIRST(buf_pool->flush_list) == nullptr) ||
+      (UT_LIST_GET_FIRST(buf_pool->flush_list)->oldest_modification <=
+          block->page.oldest_modification));
 
   /* If we are in the recovery then we need to update the flush
   red-black tree as well. */
@@ -200,7 +203,7 @@ void buf_flush_insert_into_flush_list(buf_block_t *block) {
   ut_ad(block->page.in_page_hash);
   ut_ad(!block->page.in_flush_list);
   ut_d(block->page.in_flush_list = true);
-  UT_LIST_ADD_FIRST(list, buf_pool->flush_list, &block->page);
+  UT_LIST_ADD_FIRST(buf_pool->flush_list, &block->page);
 
 #if defined UNIV_DEBUG || defined UNIV_BUF_DEBUG
   ut_a(buf_flush_validate_low());
@@ -232,7 +235,8 @@ void buf_flush_insert_sorted_into_flush_list(buf_block_t *block) {
 
     auto b = UT_LIST_GET_FIRST(buf_pool->flush_list);
 
-    while (b != nullptr && b->oldest_modification > block->page.oldest_modification) {
+    while (b != nullptr
+        && b->oldest_modification > block->page.oldest_modification) {
       ut_ad(b->in_flush_list);
       prev_b = b;
       b = UT_LIST_GET_NEXT(list, b);
@@ -240,9 +244,9 @@ void buf_flush_insert_sorted_into_flush_list(buf_block_t *block) {
   }
 
   if (prev_b == nullptr) {
-    UT_LIST_ADD_FIRST(list, buf_pool->flush_list, &block->page);
+    UT_LIST_ADD_FIRST(buf_pool->flush_list, &block->page);
   } else {
-    UT_LIST_INSERT_AFTER(list, buf_pool->flush_list, prev_b, &block->page);
+    UT_LIST_INSERT_AFTER(buf_pool->flush_list, prev_b, &block->page);
   }
 
 #if defined UNIV_DEBUG || defined UNIV_BUF_DEBUG
@@ -257,16 +261,16 @@ bool buf_flush_ready_for_replace(buf_page_t *bpage) {
 
   if (likely(buf_page_in_file(bpage))) {
 
-    return (bpage->oldest_modification == 0 && buf_page_get_io_fix(bpage) == BUF_IO_NONE && bpage->buf_fix_count == 0);
+    return (bpage->oldest_modification == 0 &&
+        buf_page_get_io_fix(bpage) == BUF_IO_NONE &&
+        bpage->buf_fix_count == 0);
   }
 
   ut_print_timestamp(ib_stream);
-  ib_logger(
-    ib_stream,
-    "  Error: buffer block state %lu"
-    " in the LRU list!\n",
-    (ulong)buf_page_get_state(bpage)
-  );
+  ib_logger(ib_stream,
+            "  Error: buffer block state %lu"
+            " in the LRU list!\n",
+            (ulong) buf_page_get_state(bpage));
   ut_print_buf(ib_stream, bpage, sizeof(buf_page_t));
   ib_logger(ib_stream, "\n");
 
@@ -276,17 +280,17 @@ bool buf_flush_ready_for_replace(buf_page_t *bpage) {
 /** Returns true if the block is modified and ready for flushing.
 @return	true if can flush immediately */
 inline bool buf_flush_ready_for_flush(
-  buf_page_t *bpage, /*!< in: buffer control block, must be
+    buf_page_t *bpage,         /*!< in: buffer control block, must be
                                buf_page_in_file(bpage) */
-  enum buf_flush flush_type
-) /*!< in: BUF_FLUSH_LRU or BUF_FLUSH_LIST */
+    enum buf_flush flush_type) /*!< in: BUF_FLUSH_LRU or BUF_FLUSH_LIST */
 {
   ut_a(buf_page_in_file(bpage));
   ut_ad(buf_pool_mutex_own());
   ut_ad(mutex_own(buf_page_get_mutex(bpage)));
   ut_ad(flush_type == to_int(BUF_FLUSH_LRU) || flush_type == BUF_FLUSH_LIST);
 
-  if (bpage->oldest_modification != 0 && buf_page_get_io_fix(bpage) == BUF_IO_NONE) {
+  if (bpage->oldest_modification != 0 &&
+      buf_page_get_io_fix(bpage) == BUF_IO_NONE) {
     ut_ad(bpage->in_flush_list);
 
     if (flush_type != BUF_FLUSH_LRU) {
@@ -308,7 +312,8 @@ inline bool buf_flush_ready_for_flush(
 
 /** Remove a block from the flush list of modified blocks. */
 
-void buf_flush_remove(buf_page_t *bpage) /*!< in: pointer to the block in question */
+void buf_flush_remove(
+    buf_page_t *bpage) /*!< in: pointer to the block in question */
 {
   ut_ad(buf_pool_mutex_own());
   ut_ad(mutex_own(buf_page_get_mutex(bpage)));
@@ -322,7 +327,7 @@ void buf_flush_remove(buf_page_t *bpage) /*!< in: pointer to the block in questi
       ut_error;
       break;
     case BUF_BLOCK_FILE_PAGE:
-      UT_LIST_REMOVE(list, buf_pool->flush_list, bpage);
+      UT_LIST_REMOVE(buf_pool->flush_list, bpage);
       break;
   }
 
@@ -337,7 +342,8 @@ void buf_flush_remove(buf_page_t *bpage) /*!< in: pointer to the block in questi
 
   bpage->oldest_modification = 0;
 
-  ut_d(UT_LIST_VALIDATE(list, buf_page_t, buf_pool->flush_list, ut_ad(ut_list_node_313->in_flush_list)));
+  auto check = [](const buf_page_t *ptr) { ut_ad(ptr->in_flush_list); };
+  ut_list_validate(buf_pool->flush_list, check);
 }
 
 /** Relocates a buffer control block on the flush_list.
@@ -345,9 +351,8 @@ Note that it is assumed that the contents of bpage has already been
 copied to dpage. */
 
 void buf_flush_relocate_on_flush_list(
-  buf_page_t *bpage, /*!< in/out: control block being moved */
-  buf_page_t *dpage
-) /*!< in/out: destination block */
+    buf_page_t *bpage, /*!< in/out: control block being moved */
+    buf_page_t *dpage) /*!< in/out: destination block */
 {
   buf_page_t *prev;
   buf_page_t *prev_b = nullptr;
@@ -371,13 +376,13 @@ void buf_flush_relocate_on_flush_list(
   ut_d(bpage->in_flush_list = false);
 
   prev = UT_LIST_GET_PREV(list, bpage);
-  UT_LIST_REMOVE(list, buf_pool->flush_list, bpage);
+  UT_LIST_REMOVE(buf_pool->flush_list, bpage);
 
   if (prev) {
     ut_ad(prev->in_flush_list);
-    UT_LIST_INSERT_AFTER(list, buf_pool->flush_list, prev, dpage);
+    UT_LIST_INSERT_AFTER(buf_pool->flush_list, prev, dpage);
   } else {
-    UT_LIST_ADD_FIRST(list, buf_pool->flush_list, dpage);
+    UT_LIST_ADD_FIRST(buf_pool->flush_list, dpage);
   }
 
   /* Just an extra check. Previous in flush_list
@@ -391,7 +396,8 @@ void buf_flush_relocate_on_flush_list(
 
 /** Updates the flush system data structures when a write is completed. */
 
-void buf_flush_write_complete(buf_page_t *bpage) /*!< in: pointer to the block in question */
+void buf_flush_write_complete(
+    buf_page_t *bpage) /*!< in: pointer to the block in question */
 {
   enum buf_flush flush_type;
 
@@ -414,7 +420,8 @@ void buf_flush_write_complete(buf_page_t *bpage) /*!< in: pointer to the block i
   /* ib_logger(ib_stream, "n pending flush %lu\n",
   buf_pool->n_flush[flush_type]); */
 
-  if ((buf_pool->n_flush[flush_type] == 0) && (buf_pool->init_flush[flush_type] == false)) {
+  if ((buf_pool->n_flush[flush_type] == 0) &&
+      (buf_pool->init_flush[flush_type] == false)) {
 
     /* The running flush batch has ended */
 
@@ -473,45 +480,43 @@ static void buf_flush_buffered_writes(void) {
 
     const buf_block_t *block;
 
-    block = (buf_block_t *)trx_doublewrite->buf_block_arr[i];
+    block = (buf_block_t *) trx_doublewrite->buf_block_arr[i];
 
     if (buf_block_get_state(block) != BUF_BLOCK_FILE_PAGE) {
       /* No simple validate for compressed pages exists. */
       continue;
     }
 
-    if (unlikely(memcmp(block->frame + (FIL_PAGE_LSN + 4), block->frame + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4))) {
+    if (unlikely(memcmp(block->frame + (FIL_PAGE_LSN + 4),
+                        block->frame +
+                            (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4),
+                        4))) {
       ut_print_timestamp(ib_stream);
-      ib_logger(
-        ib_stream,
-        "  ERROR: The page to be written"
-        " seems corrupt!\n"
-        "The lsn fields do not match!"
-        " Noticed in the buffer pool\n"
-        "before posting to the"
-        " doublewrite buffer.\n"
-      );
+      ib_logger(ib_stream, "  ERROR: The page to be written"
+                           " seems corrupt!\n"
+                           "The lsn fields do not match!"
+                           " Noticed in the buffer pool\n"
+                           "before posting to the"
+                           " doublewrite buffer.\n");
     }
 
     if (!block->check_index_page_at_flush) {
     } else if (page_is_comp(block->frame)) {
       if (unlikely(!page_simple_validate_new(block->frame))) {
-      corrupted_page:
+        corrupted_page:
         buf_page_print(block->frame, 0);
 
         ut_print_timestamp(ib_stream);
-        ib_logger(
-          ib_stream,
-          "  Apparent corruption of an"
-          " index page n:o %lu in space %lu\n"
-          "to be written to data file."
-          " We intentionally crash server\n"
-          "to prevent corrupt data"
-          " from ending up in data\n"
-          "files.\n",
-          (ulong)buf_block_get_page_no(block),
-          (ulong)buf_block_get_space(block)
-        );
+        ib_logger(ib_stream,
+                  "  Apparent corruption of an"
+                  " index page n:o %lu in space %lu\n"
+                  "to be written to data file."
+                  " We intentionally crash server\n"
+                  "to prevent corrupt data"
+                  " from ending up in data\n"
+                  "files.\n",
+                  (ulong) buf_block_get_page_no(block),
+                  (ulong) buf_block_get_space(block));
 
         ut_error;
       }
@@ -525,25 +530,29 @@ static void buf_flush_buffered_writes(void) {
   srv_dblwr_pages_written += trx_doublewrite->first_free;
   srv_dblwr_writes++;
 
-  len = ut_min(TRX_SYS_DOUBLEWRITE_BLOCK_SIZE, trx_doublewrite->first_free) * UNIV_PAGE_SIZE;
+  len = ut_min(TRX_SYS_DOUBLEWRITE_BLOCK_SIZE, trx_doublewrite->first_free) *
+      UNIV_PAGE_SIZE;
 
   write_buf = trx_doublewrite->write_buf;
   i = 0;
 
-  fil_io(OS_FILE_WRITE, true, TRX_SYS_SPACE, trx_doublewrite->block1, 0, len, (void *)write_buf, nullptr);
+  fil_io(OS_FILE_WRITE, true, TRX_SYS_SPACE, trx_doublewrite->block1, 0, len,
+         (void *) write_buf, nullptr);
 
   for (len2 = 0; len2 + UNIV_PAGE_SIZE <= len; len2 += UNIV_PAGE_SIZE, i++) {
-    const buf_block_t *block = (buf_block_t *)trx_doublewrite->buf_block_arr[i];
+    const buf_block_t
+        *block = (buf_block_t *) trx_doublewrite->buf_block_arr[i];
 
-    if (likely(buf_block_get_state(block) == BUF_BLOCK_FILE_PAGE) && unlikely(memcmp(write_buf + len2 + (FIL_PAGE_LSN + 4), write_buf + len2 + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4))) {
+    if (likely(buf_block_get_state(block) == BUF_BLOCK_FILE_PAGE) &&
+        unlikely(memcmp(write_buf + len2 + (FIL_PAGE_LSN + 4),
+                        write_buf + len2 +
+                            (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4),
+                        4))) {
       ut_print_timestamp(ib_stream);
-      ib_logger(
-        ib_stream,
-        "  ERROR: The page to be written"
-        " seems corrupt!\n"
-        "The lsn fields do not match!"
-        " Noticed in the doublewrite block1.\n"
-      );
+      ib_logger(ib_stream, "  ERROR: The page to be written"
+                           " seems corrupt!\n"
+                           "The lsn fields do not match!"
+                           " Noticed in the doublewrite block1.\n");
     }
   }
 
@@ -551,30 +560,35 @@ static void buf_flush_buffered_writes(void) {
     goto flush;
   }
 
-  len = (trx_doublewrite->first_free - TRX_SYS_DOUBLEWRITE_BLOCK_SIZE) * UNIV_PAGE_SIZE;
+  len = (trx_doublewrite->first_free - TRX_SYS_DOUBLEWRITE_BLOCK_SIZE) *
+      UNIV_PAGE_SIZE;
 
-  write_buf = trx_doublewrite->write_buf + TRX_SYS_DOUBLEWRITE_BLOCK_SIZE * UNIV_PAGE_SIZE;
+  write_buf = trx_doublewrite->write_buf +
+      TRX_SYS_DOUBLEWRITE_BLOCK_SIZE * UNIV_PAGE_SIZE;
   ut_ad(i == TRX_SYS_DOUBLEWRITE_BLOCK_SIZE);
 
-  fil_io(OS_FILE_WRITE, true, TRX_SYS_SPACE, trx_doublewrite->block2, 0, len, (void *)write_buf, nullptr);
+  fil_io(OS_FILE_WRITE, true, TRX_SYS_SPACE, trx_doublewrite->block2, 0, len,
+         (void *) write_buf, nullptr);
 
   for (len2 = 0; len2 + UNIV_PAGE_SIZE <= len; len2 += UNIV_PAGE_SIZE, i++) {
-    const buf_block_t *block = (buf_block_t *)trx_doublewrite->buf_block_arr[i];
+    const buf_block_t
+        *block = (buf_block_t *) trx_doublewrite->buf_block_arr[i];
 
-    if (likely(buf_block_get_state(block) == BUF_BLOCK_FILE_PAGE) && unlikely(memcmp(write_buf + len2 + (FIL_PAGE_LSN + 4), write_buf + len2 + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4))) {
+    if (likely(buf_block_get_state(block) == BUF_BLOCK_FILE_PAGE) &&
+        unlikely(memcmp(write_buf + len2 + (FIL_PAGE_LSN + 4),
+                        write_buf + len2 +
+                            (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4),
+                        4))) {
       ut_print_timestamp(ib_stream);
-      ib_logger(
-        ib_stream,
-        "  ERROR: The page to be"
-        " written seems corrupt!\n"
-        "The lsn fields do not match!"
-        " Noticed in"
-        " the doublewrite block2.\n"
-      );
+      ib_logger(ib_stream, "  ERROR: The page to be"
+                           " written seems corrupt!\n"
+                           "The lsn fields do not match!"
+                           " Noticed in"
+                           " the doublewrite block2.\n");
     }
   }
 
-flush:
+  flush:
   /* Now flush the doublewrite buffer data to disk */
 
   fil_flush(TRX_SYS_SPACE);
@@ -584,40 +598,35 @@ flush:
   blocks. Next do the writes to the intended positions. */
 
   for (i = 0; i < trx_doublewrite->first_free; i++) {
-    const buf_block_t *block = (buf_block_t *)trx_doublewrite->buf_block_arr[i];
+    const buf_block_t
+        *block = (buf_block_t *) trx_doublewrite->buf_block_arr[i];
 
     ut_a(buf_page_in_file(&block->page));
 
     ut_a(buf_block_get_state(block) == BUF_BLOCK_FILE_PAGE);
 
-    if (unlikely(memcmp(block->frame + (FIL_PAGE_LSN + 4), block->frame + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4))) {
+    if (unlikely(memcmp(block->frame + (FIL_PAGE_LSN + 4),
+                        block->frame +
+                            (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4),
+                        4))) {
       ut_print_timestamp(ib_stream);
-      ib_logger(
-        ib_stream,
-        "  ERROR: The page to be written"
-        " seems corrupt!\n"
-        "The lsn fields do not match!"
-        " Noticed in the buffer pool\n"
-        "after posting and flushing"
-        " the doublewrite buffer.\n"
-        "Page buf fix count %lu,"
-        " io fix %lu, state %lu\n",
-        (ulong)block->page.buf_fix_count,
-        (ulong)buf_block_get_io_fix(block),
-        (ulong)buf_block_get_state(block)
-      );
+      ib_logger(ib_stream,
+                "  ERROR: The page to be written"
+                " seems corrupt!\n"
+                "The lsn fields do not match!"
+                " Noticed in the buffer pool\n"
+                "after posting and flushing"
+                " the doublewrite buffer.\n"
+                "Page buf fix count %lu,"
+                " io fix %lu, state %lu\n",
+                (ulong) block->page.buf_fix_count,
+                (ulong) buf_block_get_io_fix(block),
+                (ulong) buf_block_get_state(block));
     }
 
-    fil_io(
-      OS_FILE_WRITE | OS_AIO_SIMULATED_WAKE_LATER,
-      false,
-      buf_block_get_space(block),
-      buf_block_get_page_no(block),
-      0,
-      UNIV_PAGE_SIZE,
-      (void *)block->frame,
-      (void *)block
-    );
+    fil_io(OS_FILE_WRITE | OS_AIO_SIMULATED_WAKE_LATER, false,
+           buf_block_get_space(block), buf_block_get_page_no(block), 0,
+           UNIV_PAGE_SIZE, (void *) block->frame, (void *) block);
 
     /* Increment the counter of I/O operations used
     for selecting LRU policy. */
@@ -636,9 +645,10 @@ flush:
 /** Posts a buffer page for writing. If the doublewrite memory buffer is
 full, calls buf_flush_buffered_writes and waits for for free space to
 appear. */
-static void buf_flush_post_to_doublewrite_buf(buf_page_t *bpage) /*!< in: buffer block to write */
+static void buf_flush_post_to_doublewrite_buf(
+    buf_page_t *bpage) /*!< in: buffer block to write */
 {
-try_again:
+  try_again:
   mutex_enter(&(trx_doublewrite->mutex));
 
   ut_a(buf_page_in_file(bpage));
@@ -653,7 +663,9 @@ try_again:
 
   ut_a(buf_page_get_state(bpage) == BUF_BLOCK_FILE_PAGE);
 
-  memcpy(trx_doublewrite->write_buf + UNIV_PAGE_SIZE * trx_doublewrite->first_free, ((buf_block_t *)bpage)->frame, UNIV_PAGE_SIZE);
+  memcpy(trx_doublewrite->write_buf +
+             UNIV_PAGE_SIZE * trx_doublewrite->first_free,
+         ((buf_block_t *) bpage)->frame, UNIV_PAGE_SIZE);
 
   trx_doublewrite->buf_block_arr[trx_doublewrite->first_free] = bpage;
 
@@ -676,27 +688,30 @@ void buf_flush_init_for_writing(byte *page, uint64_t newest_lsn) {
   /* Write the newest modification lsn to the page header and trailer */
   mach_write_to_8(page + FIL_PAGE_LSN, newest_lsn);
 
-  mach_write_to_8(page + UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM, newest_lsn);
+  mach_write_to_8(page + UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM,
+                  newest_lsn);
 
   /* Store the new formula checksum */
 
-  mach_write_to_4(page + FIL_PAGE_SPACE_OR_CHKSUM, srv_use_checksums ? buf_calc_page_new_checksum(page) : BUF_NO_CHECKSUM_MAGIC);
+  mach_write_to_4(page + FIL_PAGE_SPACE_OR_CHKSUM,
+                  srv_use_checksums ? buf_calc_page_new_checksum(page)
+                                    : BUF_NO_CHECKSUM_MAGIC);
 
   /* We overwrite the first 4 bytes of the end lsn field to store
   the old formula checksum. Since it depends also on the field
   FIL_PAGE_SPACE_OR_CHKSUM, it has to be calculated after storing the
   new formula checksum. */
 
-  mach_write_to_4(
-    page + UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM,
-    srv_use_checksums ? buf_calc_page_old_checksum(page) : BUF_NO_CHECKSUM_MAGIC
-  );
+  mach_write_to_4(page + UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM,
+                  srv_use_checksums ? buf_calc_page_old_checksum(page)
+                                    : BUF_NO_CHECKSUM_MAGIC);
 }
 
 /** Does an asynchronous write of a buffer page. NOTE: in simulated aio and
 also when the doublewrite buffer is used, we must call
 buf_flush_buffered_writes after we have posted a batch of writes! */
-static void buf_flush_write_block_low(buf_page_t *bpage) /*!< in: buffer block to write */
+static void
+buf_flush_write_block_low(buf_page_t *bpage) /*!< in: buffer block to write */
 {
   page_t *frame = nullptr;
 #ifdef UNIV_LOG_DEBUG
@@ -719,12 +734,9 @@ static void buf_flush_write_block_low(buf_page_t *bpage) /*!< in: buffer block t
 #ifdef UNIV_LOG_DEBUG
   if (!univ_log_debug_warned) {
     univ_log_debug_warned = true;
-    ib_logger(
-      ib_stream,
-      "Warning: cannot force log to disk if"
-      " UNIV_LOG_DEBUG is defined!\n"
-      "Crash recovery will not work!\n"
-    );
+    ib_logger(ib_stream, "Warning: cannot force log to disk if"
+                         " UNIV_LOG_DEBUG is defined!\n"
+                         "Crash recovery will not work!\n");
   }
 #else
   /* Force the log to the disk before writing the modified block */
@@ -738,22 +750,16 @@ static void buf_flush_write_block_low(buf_page_t *bpage) /*!< in: buffer block t
       ut_error;
       break;
     case BUF_BLOCK_FILE_PAGE:
-      frame = ((buf_block_t *)bpage)->frame;
-      buf_flush_init_for_writing(((buf_block_t *)bpage)->frame, bpage->newest_modification);
+      frame = ((buf_block_t *) bpage)->frame;
+      buf_flush_init_for_writing(((buf_block_t *) bpage)->frame,
+                                 bpage->newest_modification);
       break;
   }
 
   if (!srv_use_doublewrite_buf || !trx_doublewrite) {
-    fil_io(
-      OS_FILE_WRITE | OS_AIO_SIMULATED_WAKE_LATER,
-      false,
-      buf_page_get_space(bpage),
-      buf_page_get_page_no(bpage),
-      0,
-      UNIV_PAGE_SIZE,
-      frame,
-      bpage
-    );
+    fil_io(OS_FILE_WRITE | OS_AIO_SIMULATED_WAKE_LATER, false,
+           buf_page_get_space(bpage), buf_page_get_page_no(bpage), 0,
+           UNIV_PAGE_SIZE, frame, bpage);
   } else {
     buf_flush_post_to_doublewrite_buf(bpage);
   }
@@ -765,10 +771,8 @@ os_aio_simulated_wake_handler_threads after we have posted a batch of
 writes! NOTE: buf_pool_mutex and buf_page_get_mutex(bpage) must be
 held upon entering this function, and they will be released by this
 function. */
-static void buf_flush_page(
-  buf_page_t *bpage, /*!< in: buffer control block */
-  enum buf_flush flush_type
-) /*!< in: BUF_FLUSH_LRU
+static void buf_flush_page(buf_page_t *bpage, /*!< in: buffer control block */
+                           enum buf_flush flush_type) /*!< in: BUF_FLUSH_LRU
                                                       or BUF_FLUSH_LIST */
 {
   mutex_t *block_mutex;
@@ -797,44 +801,44 @@ static void buf_flush_page(
     bool is_s_latched;
     case BUF_FLUSH_LIST:
       /* If the simulated aio thread is not running, we must
-    not wait for any latch, as we may end up in a deadlock:
-    if buf_fix_count == 0, then we know we need not wait */
+      not wait for any latch, as we may end up in a deadlock:
+      if buf_fix_count == 0, then we know we need not wait */
 
       is_s_latched = (bpage->buf_fix_count == 0);
       if (is_s_latched) {
-        rw_lock_s_lock_gen(&((buf_block_t *)bpage)->lock, BUF_IO_WRITE);
+        rw_lock_s_lock_gen(&((buf_block_t *) bpage)->lock, BUF_IO_WRITE);
       }
 
       mutex_exit(block_mutex);
       buf_pool_mutex_exit();
 
       /* Even though bpage is not protected by any mutex at
-    this point, it is safe to access bpage, because it is
-    io_fixed and oldest_modification != 0.  Thus, it
-    cannot be relocated in the buffer pool or removed from
-    flush_list or LRU_list. */
+      this point, it is safe to access bpage, because it is
+      io_fixed and oldest_modification != 0.  Thus, it
+      cannot be relocated in the buffer pool or removed from
+      flush_list or LRU_list. */
 
       if (!is_s_latched) {
         buf_flush_buffered_writes();
 
-        rw_lock_s_lock_gen(&((buf_block_t *)bpage)->lock, BUF_IO_WRITE);
+        rw_lock_s_lock_gen(&((buf_block_t *) bpage)->lock, BUF_IO_WRITE);
       }
 
       break;
 
     case BUF_FLUSH_LRU:
       /* VERY IMPORTANT:
-    Because any thread may call the LRU flush, even when owning
-    locks on pages, to avoid deadlocks, we must make sure that the
-    s-lock is acquired on the page without waiting: this is
-    accomplished because buf_flush_ready_for_flush() must hold,
-    and that requires the page not to be bufferfixed. */
+      Because any thread may call the LRU flush, even when owning
+      locks on pages, to avoid deadlocks, we must make sure that the
+      s-lock is acquired on the page without waiting: this is
+      accomplished because buf_flush_ready_for_flush() must hold,
+      and that requires the page not to be bufferfixed. */
 
-      rw_lock_s_lock_gen(&((buf_block_t *)bpage)->lock, BUF_IO_WRITE);
+      rw_lock_s_lock_gen(&((buf_block_t *) bpage)->lock, BUF_IO_WRITE);
 
       /* Note that the s-latch is acquired before releasing the
-    buf_pool mutex: this ensures that the latch is acquired
-    immediately. */
+      buf_pool mutex: this ensures that the latch is acquired
+      immediately. */
 
       mutex_exit(block_mutex);
       buf_pool_mutex_exit();
@@ -844,14 +848,15 @@ static void buf_flush_page(
       ut_error;
   }
 
-    /* Even though bpage is not protected by any mutex at this
+  /* Even though bpage is not protected by any mutex at this
   point, it is safe to access bpage, because it is io_fixed and
   oldest_modification != 0.  Thus, it cannot be relocated in the
   buffer pool or removed from flush_list or LRU_list. */
 
 #ifdef UNIV_DEBUG
   if (buf_debug_prints) {
-    ib_logger(ib_stream, "Flushing %u space %u page %u\n", flush_type, bpage->space, bpage->offset);
+    ib_logger(ib_stream, "Flushing %u space %u page %u\n", flush_type,
+              bpage->space, bpage->offset);
   }
 #endif /* UNIV_DEBUG */
   buf_flush_write_block_low(bpage);
@@ -859,11 +864,10 @@ static void buf_flush_page(
 
 /** Flushes to disk all flushable pages within the flush area.
 @return	number of pages flushed */
-static ulint buf_flush_try_neighbors(
-  ulint space,  /*!< in: space id */
-  ulint offset, /*!< in: page offset */
-  enum buf_flush flush_type
-) /*!< in: BUF_FLUSH_LRU or
+static ulint
+buf_flush_try_neighbors(ulint space,               /*!< in: space id */
+                        ulint offset,              /*!< in: page offset */
+                        enum buf_flush flush_type) /*!< in: BUF_FLUSH_LRU or
                                                    BUF_FLUSH_LIST */
 {
   buf_page_t *bpage;
@@ -883,7 +887,8 @@ static ulint buf_flush_try_neighbors(
     /* When flushed, dirty blocks are searched in neighborhoods of
     this size, and flushed along with the original page. */
 
-    ulint buf_flush_area = ut_min(BUF_READ_AHEAD_AREA, buf_pool->curr_size / 16);
+    ulint buf_flush_area =
+        ut_min(BUF_READ_AHEAD_AREA, buf_pool->curr_size / 16);
 
     low = (offset / buf_flush_area) * buf_flush_area;
     high = (offset / buf_flush_area + 1) * buf_flush_area;
@@ -916,7 +921,8 @@ static ulint buf_flush_try_neighbors(
 
       mutex_enter(block_mutex);
 
-      if (buf_flush_ready_for_flush(bpage, flush_type) && (i == offset || !bpage->buf_fix_count)) {
+      if (buf_flush_ready_for_flush(bpage, flush_type) &&
+          (i == offset || !bpage->buf_fix_count)) {
         /* We only try to flush those
         neighbors != offset where the buf fix count is
         zero, as we then know that we probably can
@@ -950,15 +956,14 @@ flush, the calling thread is not allowed to own any latches on pages!
 ULINT_UNDEFINED if there was a flush of the same type already running */
 
 ulint buf_flush_batch(
-  enum buf_flush flush_type, /*!< in: BUF_FLUSH_LRU or
+    enum buf_flush flush_type, /*!< in: BUF_FLUSH_LRU or
                                BUF_FLUSH_LIST; if BUF_FLUSH_LIST,
                                then the caller must not own any
                                latches on pages */
-  ulint min_n,               /*!< in: wished minimum mumber of blocks
+    ulint min_n,               /*!< in: wished minimum mumber of blocks
                                flushed (it is not guaranteed that the
                                actual number is that big, though) */
-  uint64_t lsn_limit
-) /*!< in the case BUF_FLUSH_LIST all
+    uint64_t lsn_limit)        /*!< in the case BUF_FLUSH_LIST all
                                   blocks whose oldest_modification is
                                   smaller than this should be flushed
                                   (if their number does not exceed
@@ -975,7 +980,8 @@ ulint buf_flush_batch(
 #endif /* UNIV_SYNC_DEBUG */
   buf_pool_mutex_enter();
 
-  if ((buf_pool->n_flush[flush_type] > 0) || (buf_pool->init_flush[flush_type] == true)) {
+  if ((buf_pool->n_flush[flush_type] > 0) ||
+      (buf_pool->init_flush[flush_type] == true)) {
 
     /* There is already a flush batch of the same type running */
 
@@ -987,7 +993,7 @@ ulint buf_flush_batch(
   buf_pool->init_flush[flush_type] = true;
 
   for (;;) {
-  flush_next:
+    flush_next:
     /* If we have flushed enough, leave the loop */
     if (page_count >= min_n) {
 
@@ -1070,11 +1076,11 @@ ulint buf_flush_batch(
 #ifdef UNIV_DEBUG
   if (buf_debug_prints && page_count > 0) {
     ut_a(flush_type == BUF_FLUSH_LRU || flush_type == BUF_FLUSH_LIST);
-    ib_logger(
-      ib_stream,
-      flush_type == BUF_FLUSH_LRU ? "Flushed %lu pages in LRU flush\n" : "Flushed %lu pages in flush list flush\n",
-      (ulong)page_count
-    );
+    ib_logger(ib_stream,
+              flush_type == BUF_FLUSH_LRU
+              ? "Flushed %lu pages in LRU flush\n"
+              : "Flushed %lu pages in flush list flush\n",
+              (ulong) page_count);
   }
 #endif /* UNIV_DEBUG */
 
@@ -1092,7 +1098,8 @@ ulint buf_flush_batch(
 
 /** Waits until a flush batch of the given type ends */
 
-void buf_flush_wait_batch_end(enum buf_flush type) /*!< in: BUF_FLUSH_LRU or BUF_FLUSH_LIST */
+void buf_flush_wait_batch_end(
+    enum buf_flush type) /*!< in: BUF_FLUSH_LRU or BUF_FLUSH_LIST */
 {
   ut_ad((type == BUF_FLUSH_LRU) || (type == BUF_FLUSH_LIST));
 
@@ -1115,8 +1122,11 @@ static ulint buf_flush_LRU_recommendation(void) {
 
   bpage = UT_LIST_GET_LAST(buf_pool->LRU);
 
-  while ((bpage != nullptr) && (n_replaceable < BUF_FLUSH_FREE_BLOCK_MARGIN + BUF_FLUSH_EXTRA_MARGIN) &&
-         (distance < BUF_LRU_FREE_SEARCH_LEN)) {
+  while (
+      (bpage != nullptr) &&
+          (n_replaceable < BUF_FLUSH_FREE_BLOCK_MARGIN + BUF_FLUSH_EXTRA_MARGIN)
+          &&
+              (distance < BUF_LRU_FREE_SEARCH_LEN)) {
 
     mutex_t *block_mutex = buf_page_get_mutex(bpage);
 
@@ -1241,7 +1251,8 @@ ulint buf_flush_get_desired_flush_rate(void) {
   /* redo_avg below is average at which redo is generated in
   past BUF_FLUSH_STAT_N_INTERVAL + redo generated in the current
   interval. */
-  redo_avg = (ulint)(buf_flush_stat_sum.redo / BUF_FLUSH_STAT_N_INTERVAL + (lsn - buf_flush_stat_cur.redo));
+  redo_avg = (ulint) (buf_flush_stat_sum.redo / BUF_FLUSH_STAT_N_INTERVAL +
+      (lsn - buf_flush_stat_cur.redo));
 
   /* An overflow can happen possibly if we flush more than 2^32
   pages in BUF_FLUSH_STAT_N_INTERVAL. This is a very very
@@ -1251,8 +1262,8 @@ ulint buf_flush_get_desired_flush_rate(void) {
   /* lru_flush_avg below is rate at which pages are flushed as
   part of LRU flush in past BUF_FLUSH_STAT_N_INTERVAL + the
   number of pages flushed in the current interval. */
-  lru_flush_avg =
-    buf_flush_stat_sum.n_flushed / BUF_FLUSH_STAT_N_INTERVAL + (buf_lru_flush_page_count - buf_flush_stat_cur.n_flushed);
+  lru_flush_avg = buf_flush_stat_sum.n_flushed / BUF_FLUSH_STAT_N_INTERVAL +
+      (buf_lru_flush_page_count - buf_flush_stat_cur.n_flushed);
 
   n_flush_req = (n_dirty * redo_avg) / log_capacity;
 
@@ -1261,7 +1272,7 @@ ulint buf_flush_get_desired_flush_rate(void) {
   number of pages that we are historically flushing from the
   LRU list */
   rate = n_flush_req - lru_flush_avg;
-  return (rate > 0 ? (ulint)rate : 0);
+  return (rate > 0 ? (ulint) rate : 0);
 }
 
 #if defined UNIV_DEBUG || defined UNIV_BUF_DEBUG
@@ -1270,7 +1281,7 @@ ulint buf_flush_get_desired_flush_rate(void) {
 static bool buf_flush_validate_low() {
   const ib_rbt_node_t *rnode{};
 
-  UT_LIST_VALIDATE(list, buf_page_t, buf_pool->flush_list, ut_ad(ut_list_node_313->in_flush_list));
+  UT_LIST_CHECK(buf_pool->flush_list);
 
   auto bpage = UT_LIST_GET_FIRST(buf_pool->flush_list);
 

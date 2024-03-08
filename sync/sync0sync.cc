@@ -314,7 +314,7 @@ void mutex_create_func(
 
   ut_ad(UT_LIST_GET_LEN(mutex_list) == 0 || UT_LIST_GET_FIRST(mutex_list)->magic_n == MUTEX_MAGIC_N);
 
-  UT_LIST_ADD_FIRST(list, mutex_list, mutex);
+  UT_LIST_ADD_FIRST(mutex_list, mutex);
 
   mutex_exit(&mutex_list_mutex);
 }
@@ -341,7 +341,7 @@ void mutex_free(mutex_t *mutex) /*!< in: mutex */
     ut_ad(!UT_LIST_GET_PREV(list, mutex) || UT_LIST_GET_PREV(list, mutex)->magic_n == MUTEX_MAGIC_N);
     ut_ad(!UT_LIST_GET_NEXT(list, mutex) || UT_LIST_GET_NEXT(list, mutex)->magic_n == MUTEX_MAGIC_N);
 
-    UT_LIST_REMOVE(list, mutex_list, mutex);
+    UT_LIST_REMOVE(mutex_list, mutex);
 
     mutex_exit(&mutex_list_mutex);
   }

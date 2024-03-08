@@ -29,7 +29,8 @@ Created 1/8/1996 Heikki Tuuri
 /** initial memory heap size when creating a table or index object */
 constexpr ulint DICT_HEAP_SIZE = 100;
 
-dict_table_t *dict_mem_table_create(const char *name, ulint space, ulint n_cols, ulint flags) {
+dict_table_t *dict_mem_table_create(const char *name, ulint space, ulint n_cols,
+                                    ulint flags) {
   ut_ad(name != nullptr);
   ut_a(!(flags & (~0UL << DICT_TF2_BITS)));
 
@@ -43,7 +44,14 @@ dict_table_t *dict_mem_table_create(const char *name, ulint space, ulint n_cols,
   table->space = (unsigned int)space;
   table->n_cols = (unsigned int)(n_cols + DATA_N_SYS_COLS);
 
-  table->cols = (dict_col_t *)mem_heap_alloc(heap, (n_cols + DATA_N_SYS_COLS) * sizeof(dict_col_t));
+  UT_LIST_INIT(table->locks);
+  UT_LIST_INIT(table->indexes);
+  UT_LIST_INIT(table->foreign_list);
+  UT_LIST_INIT(table->referenced_list);
+  UT_LIST_INIT(table->table_LRU);
+
+  table->cols = (dict_col_t *)mem_heap_alloc(heap, (n_cols + DATA_N_SYS_COLS) *
+                                                       sizeof(dict_col_t));
 
   ut_d(table->magic_n = DICT_TABLE_MAGIC_N);
   return table;
@@ -63,7 +71,8 @@ void dict_mem_table_free(dict_table_t *table) {
 @param[in] name                 New column name
 @param[in,out] heap             Heap for allocation.
 @return	new column names array */
-static const char *dict_add_col_name(const char *col_names, ulint cols, const char *name, mem_heap_t *heap) {
+static const char *dict_add_col_name(const char *col_names, ulint cols,
+                                     const char *name, mem_heap_t *heap) {
   ut_ad(!cols == !col_names);
 
   ulint old_len;
@@ -94,7 +103,9 @@ static const char *dict_add_col_name(const char *col_names, ulint cols, const ch
   return ptr;
 }
 
-void dict_mem_table_add_col(dict_table_t *table, mem_heap_t *heap, const char *name, ulint mtype, ulint prtype, ulint len) {
+void dict_mem_table_add_col(dict_table_t *table, mem_heap_t *heap,
+                            const char *name, ulint mtype, ulint prtype,
+                            ulint len) {
   ut_ad(table != nullptr);
   ut_ad(table->magic_n == DICT_TABLE_MAGIC_N);
   ut_ad(!heap == !name);
@@ -131,7 +142,9 @@ void dict_mem_table_add_col(dict_table_t *table, mem_heap_t *heap, const char *n
   col->mbmaxlen = (unsigned int)mbmaxlen;
 }
 
-dict_index_t *dict_mem_index_create(const char *table_name, const char *index_name, ulint space, ulint type, ulint n_fields) {
+dict_index_t *dict_mem_index_create(const char *table_name,
+                                    const char *index_name, ulint space,
+                                    ulint type, ulint n_fields) {
   ut_ad(table_name != nullptr);
   ut_ad(index_name != nullptr);
 
@@ -146,7 +159,8 @@ dict_index_t *dict_mem_index_create(const char *table_name, const char *index_na
   index->table_name = table_name;
   index->n_fields = (unsigned int)n_fields;
 
-  index->fields = (dict_field_t *)mem_heap_alloc(heap, 1 + n_fields * sizeof(dict_field_t));
+  index->fields =
+      (dict_field_t *)mem_heap_alloc(heap, 1 + n_fields * sizeof(dict_field_t));
 
   /* The '1 +' above prevents allocation of an empty mem block */
 
@@ -159,14 +173,16 @@ dict_index_t *dict_mem_index_create(const char *table_name, const char *index_na
 
 dict_foreign_t *dict_mem_foreign_create(void) {
   auto heap = mem_heap_create(100);
-  auto foreign = (dict_foreign_t *)mem_heap_zalloc(heap, sizeof(dict_foreign_t));
+  auto foreign =
+      (dict_foreign_t *)mem_heap_zalloc(heap, sizeof(dict_foreign_t));
 
   foreign->heap = heap;
 
   return foreign;
 }
 
-void dict_mem_index_add_field(dict_index_t *index, const char *name, ulint prefix_len) {
+void dict_mem_index_add_field(dict_index_t *index, const char *name,
+                              ulint prefix_len) {
   ut_ad(index != nullptr);
   ut_ad(index->magic_n == DICT_INDEX_MAGIC_N);
 

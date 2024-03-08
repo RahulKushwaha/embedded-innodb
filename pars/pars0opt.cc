@@ -145,8 +145,8 @@ static que_node_t *opt_look_for_col_in_comparison_before(
   ut_ad(search_cond);
 
   ut_a((search_cond->func == '<') || (search_cond->func == '>') ||
-       (search_cond->func == '=') || (search_cond->func == PARS_GE_TOKEN) ||
-       (search_cond->func == PARS_LE_TOKEN));
+      (search_cond->func == '=') || (search_cond->func == PARS_GE_TOKEN) ||
+      (search_cond->func == PARS_LE_TOKEN));
 
   table = sel_node_get_nth_plan(sel_node, nth_table)->table;
 
@@ -155,9 +155,9 @@ static que_node_t *opt_look_for_col_in_comparison_before(
     return (NULL);
 
   } else if ((cmp_type == OPT_COMPARISON) && (search_cond->func != '<') &&
-             (search_cond->func != '>') &&
-             (search_cond->func != PARS_GE_TOKEN) &&
-             (search_cond->func != PARS_LE_TOKEN)) {
+      (search_cond->func != '>') &&
+      (search_cond->func != PARS_GE_TOKEN) &&
+      (search_cond->func != PARS_LE_TOKEN)) {
 
     return (NULL);
   }
@@ -454,8 +454,8 @@ opt_check_order_by(sel_node_t *sel_node) /*!< in: select node; asserts an error
       ut_a(plan->table == order_table);
 
       ut_a((dict_index_get_n_unique(plan->index) <= plan->n_exact_match) ||
-           (dict_index_get_nth_col_no(plan->index, plan->n_exact_match) ==
-            order_col_no));
+          (dict_index_get_nth_col_no(plan->index, plan->n_exact_match) ==
+              order_col_no));
     }
   }
 }
@@ -669,10 +669,10 @@ static void opt_find_test_conds(sel_node_t *sel_node, /*!< in: select node */
   func_class = opt_classify_comparison(sel_node, i, cond);
 
   if (func_class == OPT_END_COND) {
-    UT_LIST_ADD_LAST(cond_list, plan->end_conds, cond);
+    UT_LIST_ADD_LAST(plan->end_conds, cond);
 
   } else if (func_class == OPT_TEST_COND) {
-    UT_LIST_ADD_LAST(cond_list, plan->other_conds, cond);
+    UT_LIST_ADD_LAST(plan->other_conds, cond);
   }
 }
 
@@ -817,7 +817,7 @@ void opt_find_all_cols(
 
   /* The same column did not occur in the list: add it */
 
-  UT_LIST_ADD_LAST(col_var_list, *col_list, sym_node);
+  UT_LIST_ADD_LAST(*col_list, sym_node);
 
   sym_node->copy_val = copy_val;
 
@@ -1095,7 +1095,7 @@ void opt_print_query_plan(sel_node_t *sel_node) /*!< in: select node */
     ib_logger(ib_stream, "Table ");
     dict_index_name_print(ib_stream, NULL, plan->index);
     ib_logger(ib_stream, "; exact m. %lu, match %lu, end conds %lu\n",
-              (unsigned long)plan->n_exact_match, (unsigned long)n_fields,
-              (unsigned long)UT_LIST_GET_LEN(plan->end_conds));
+              (unsigned long) plan->n_exact_match, (unsigned long) n_fields,
+              (unsigned long) UT_LIST_GET_LEN(plan->end_conds));
   }
 }

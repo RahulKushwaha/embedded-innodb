@@ -261,7 +261,7 @@ void rw_lock_create_func(
     ut_a(UT_LIST_GET_FIRST(rw_lock_list)->m_magic_n == RW_LOCK_MAGIC_N);
   }
 
-  UT_LIST_ADD_FIRST(list, rw_lock_list, lock);
+  UT_LIST_ADD_FIRST(rw_lock_list, lock);
 
   mutex_exit(&rw_lock_list_mutex);
 }
@@ -284,7 +284,7 @@ void rw_lock_free(rw_lock_t *lock) {
     ut_a(UT_LIST_GET_NEXT(list, lock)->m_magic_n == RW_LOCK_MAGIC_N);
   }
 
-  UT_LIST_REMOVE(list, rw_lock_list, lock);
+  UT_LIST_REMOVE(rw_lock_list, lock);
 
   mutex_exit(&rw_lock_list_mutex);
 }

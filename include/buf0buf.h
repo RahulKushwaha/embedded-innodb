@@ -1,4 +1,4 @@
-/****************************************************************************
+/***
 Copyright (c) 1995, 2010, Innobase Oy. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
@@ -33,6 +33,7 @@ Created 11/5/1995 Heikki Tuuri
 #include "sync0rw.h"
 
 struct fil_addr_t;
+typedef struct mtr_struct mtr_t;
 typedef struct ib_rbt_struct ib_rbt_t;
 
 /*** Returns a free block from the buf_pool. The block is taken off the
@@ -77,7 +78,8 @@ constexpr ulint BUF_KEEP_OLD = 52;
 extern buf_pool_t *buf_pool;
 
 #ifdef UNIV_DEBUG
-/*! If this is set true, the program prints info whenever read or flush occurs */
+/*! If this is set true, the program prints info whenever read or flush occurs
+ */
 extern bool buf_debug_prints;
 #endif /* UNIV_DEBUG */
 
@@ -119,24 +121,32 @@ void buf_close();
 freeing all mutexes. */
 void buf_mem_free();
 
+/*** Drops the adaptive hash index.  To prevent a livelock, this function
+is only to be called while holding btr_search_latch and while
+btr_search_enabled == false. */
+void buf_pool_drop_hash_index();
+
 /*** Resizes the buffer pool. */
 void buf_pool_resize();
 
 /*** NOTE! The following macros should be used instead of buf_page_get_gen,
 to improve debugging. Only values RW_S_LATCH and RW_X_LATCH are allowed
 in LA! */
-#define buf_page_get(SP, UNUSED, PG, LA, MTR) buf_page_get_gen(SP, PG, LA, nullptr, BUF_GET, __FILE__, __LINE__, MTR)
+#define buf_page_get(SP, UNUSED, PG, LA, MTR)                                  \
+  buf_page_get_gen(SP, PG, LA, nullptr, BUF_GET, __FILE__, __LINE__, MTR)
 
 /*** Use these macros to bufferfix a page with no latching. Remember not to
 read the contents of the page unless you know it is safe. Do not modify
 the contents of the page! We have separated this case, because it is
 error-prone programming not to set a latch, and it should be used
 with care. */
-#define buf_page_get_with_no_latch(SP, UNUSED, PG, MTR) \
-  buf_page_get_gen(SP, PG, RW_NO_LATCH, nullptr, BUF_GET_NO_LATCH, __FILE__, __LINE__, MTR)
+#define buf_page_get_with_no_latch(SP, UNUSED, PG, MTR)                        \
+  buf_page_get_gen(SP, PG, RW_NO_LATCH, nullptr, BUF_GET_NO_LATCH, __FILE__,   \
+                   __LINE__, MTR)
 
 /**
- * This is the general function used to get optimistic access to a database page.
+ * This is the general function used to get optimistic access to a database
+ * page.
  * @param rw_latch      in: RW_S_LATCH, RW_X_LATCH
  * @param block         in: guessed block
  * @param modify_clock  in: modify clock value if mode is ..._GUESS_ON_CLOCK
@@ -145,10 +155,13 @@ with care. */
  * @param mtr           in: mini-transaction
  * @return              true if success
  */
-bool buf_page_optimistic_get(ulint rw_latch, buf_block_t *block, uint64_t modify_clock, const char *file, ulint line, mtr_t *mtr);
+bool buf_page_optimistic_get(ulint rw_latch, buf_block_t *block,
+                             uint64_t modify_clock, const char *file,
+                             ulint line, mtr_t *mtr);
 
 /**
- * This is used to get access to a known database page, when no waiting can be done.
+ * This is used to get access to a known database page, when no waiting can be
+ * done.
  *
  * @param rw_latch  in: RW_S_LATCH, RW_X_LATCH
  * @param block     in: the known page
@@ -158,7 +171,8 @@ bool buf_page_optimistic_get(ulint rw_latch, buf_block_t *block, uint64_t modify
  * @param mtr       in: mini-transaction
  * @return          true if success
  */
-bool buf_page_get_known_nowait(ulint rw_latch, buf_block_t *block, ulint mode, const char *file, ulint line, mtr_t *mtr);
+bool buf_page_get_known_nowait(ulint rw_latch, buf_block_t *block, ulint mode,
+                               const char *file, ulint line, mtr_t *mtr);
 
 /*** Given a tablespace id and page number tries to get that page. If the
 page is not in the buffer pool it is not loaded and nullptr is returned.
@@ -168,7 +182,9 @@ Suitable for using when holding the kernel mutex.
 @param[in] file           File name
 @param[in] line           Line where called
 @param[in,out] mtr        Mini-transaction  */
-const buf_block_t *buf_page_try_get_func(space_id_t space_id, page_no_t page_no, const char *file, ulint line, mtr_t *mtr);
+const buf_block_t *buf_page_try_get_func(space_id_t space_id, page_no_t page_no,
+                                         const char *file, ulint line,
+                                         mtr_t *mtr);
 
 /** Tries to get a page. If the page is not in the buffer pool it is
 not loaded.  Suitable for using when holding the kernel mutex.
@@ -176,7 +192,8 @@ not loaded.  Suitable for using when holding the kernel mutex.
 @param page_no	in: page number
 @param mtr	in: mini-transaction
 @return		the page if in buffer pool, nullptr if not */
-#define buf_page_try_get(space_id, page_no, mtr) buf_page_try_get_func(space_id, page_no, __FILE__, __LINE__, mtr);
+#define buf_page_try_get(space_id, page_no, mtr)                               \
+  buf_page_try_get_func(space_id, page_no, __FILE__, __LINE__, mtr);
 
 /**
  * This is the general function used to get access to a database page.
@@ -189,12 +206,12 @@ not loaded.  Suitable for using when holding the kernel mutex.
  * @param file      in: file name
  * @param line      in: line where called
  * @param mtr       in: mini-transaction
- * 
+ *
  * @return          pointer to the block or nullptr
  */
-buf_block_t *buf_page_get_gen(
-  space_id_t space, page_no_t offset, ulint rw_latch, buf_block_t *guess, ulint mode, const char *file, ulint line, mtr_t *mtr
-);
+buf_block_t *buf_page_get_gen(space_id_t space, page_no_t offset,
+                              ulint rw_latch, buf_block_t *guess, ulint mode,
+                              const char *file, ulint line, mtr_t *mtr);
 
 /**
  * Initializes a page to the buffer buf_pool. The page is usually not read
@@ -216,7 +233,8 @@ buf_block_t *buf_page_create(space_id_t space, page_no_t offset, mtr_t *mtr);
  * @param offset in: offset of the page within space in units of a page
  * @param block  in: block to init
  */
-void buf_page_init_for_backup_restore(space_id_t space, page_no_t offset, ulint, buf_block_t *block);
+void buf_page_init_for_backup_restore(space_id_t space, page_no_t offset, ulint,
+                                      buf_block_t *block);
 
 /**
  * Moves a page to the start of the buffer pool LRU list. This high-level
@@ -228,7 +246,8 @@ void buf_page_init_for_backup_restore(space_id_t space, page_no_t offset, ulint,
 void buf_page_make_young(buf_page_t *bpage);
 
 /**
- * Resets the check_index_page_at_flush field of a page if found in the buffer pool.
+ * Resets the check_index_page_at_flush field of a page if found in the buffer
+ * pool.
  *
  * @param space     in: space id
  * @param offset    in: page number
@@ -245,7 +264,8 @@ void buf_reset_check_index_page_at_flush(space_id_t space, page_no_t offset);
  * @param offset    in: page number
  * @return          control block if found in page hash table, otherwise nullptr
  */
-buf_page_t *buf_page_set_file_page_was_freed(space_id_t space, page_no_t offset);
+buf_page_t *buf_page_set_file_page_was_freed(space_id_t space,
+                                             page_no_t offset);
 
 /**
  * Sets file_page_was_freed false if the page is found in the buffer
@@ -257,13 +277,15 @@ buf_page_t *buf_page_set_file_page_was_freed(space_id_t space, page_no_t offset)
  * @param offset    in: page number
  * @return          control block if found in page hash table, otherwise nullptr
  */
-buf_page_t *buf_page_reset_file_page_was_freed(space_id_t space, page_no_t offset);
+buf_page_t *buf_page_reset_file_page_was_freed(space_id_t space,
+                                               page_no_t offset);
 #endif /* UNIV_DEBUG */
 
 /**
  * Returns the current state of is_hashed of a page. false if the page
  * is not in the pool.
- * NOTE that this operation does not fix the page in the pool if it is found there.
+ * NOTE that this operation does not fix the page in the pool if it is found
+ * there.
  *
  * @param space     in: space id
  * @param offset    in: page number
@@ -303,7 +325,8 @@ ulint buf_calc_page_old_checksum(const byte *page);
 bool buf_page_is_corrupted(const byte *read_buf);
 
 /**
- * @brief Decrements the bufferfix count of a buffer control block and releases a latch, if specified.
+ * @brief Decrements the bufferfix count of a buffer control block and releases
+ * a latch, if specified.
  *
  * @param block The buffer block.
  * @param rw_latch The type of latch (RW_S_LATCH, RW_X_LATCH, RW_NO_LATCH).
@@ -319,7 +342,8 @@ void buf_page_release(buf_block_t *block, ulint rw_latch, mtr_t *mtr);
  * @param space     out: space id
  * @param addr      out: page offset and byte offset
  */
-inline void buf_ptr_get_fsp_addr(const void *ptr, ulint *space, fil_addr_t *addr);
+inline void buf_ptr_get_fsp_addr(const void *ptr, ulint *space,
+                                 fil_addr_t *addr);
 
 #if defined UNIV_DEBUG || defined UNIV_BUF_DEBUG
 /*** Validates the buffer pool data structure.
@@ -333,10 +357,8 @@ void buf_print(void);
 #endif /* UNIV_DEBUG_PRINT || UNIV_DEBUG || UNIV_BUF_DEBUG */
 
 /*** Prints a page to stderr. */
-void buf_page_print(
-  const byte *read_buf, /** in: a database page */
-  ulint
-);
+void buf_page_print(const byte *read_buf, /** in: a database page */
+                    ulint);
 
 #ifdef UNIV_DEBUG
 
@@ -383,11 +405,10 @@ void buf_var_init();
 /*** Adds latch level info for the rw-lock protecting the buffer frame. This
 should be called in the debug version after a successful latching of a
 page if we know the latching order level of the acquired latch. */
-inline void buf_block_dbg_add_level(
-  buf_block_t *block, /** in: buffer page
+inline void
+buf_block_dbg_add_level(buf_block_t *block,   /** in: buffer page
                                               where we have acquired latch */
-  ulint level
-);                                            /** in: latching order level */
+                        ulint level);         /** in: latching order level */
 #else                                         /* UNIV_SYNC_DEBUG */
 #define buf_block_dbg_add_level(block, level) /* nothing */
 #endif                                        /* UNIV_SYNC_DEBUG */
@@ -395,8 +416,9 @@ inline void buf_block_dbg_add_level(
 #ifdef UNIV_DEBUG
 /*** Gets a pointer to the memory frame of a block.
 @return	pointer to the frame */
-inline buf_frame_t *buf_block_get_frame(const buf_block_t *block) /** in: pointer to the control block */
-  __attribute__((pure));
+inline buf_frame_t *buf_block_get_frame(
+    const buf_block_t *block) /** in: pointer to the control block */
+    __attribute__((pure));
 #else /* UNIV_DEBUG */
 #define buf_block_get_frame(block) (block)->frame
 #endif /* UNIV_DEBUG */
@@ -427,20 +449,26 @@ bool buf_pointer_is_block_field(const void *ptr); /** in: pointer not
  * and the page is not an ibuf page, or if the space is deleted or being
  * deleted, then this function does nothing. Sets the io_fix flag to
  * BUF_IO_READ and sets a non-recursive exclusive lock on the buffer frame.
- * The io-handler must take care that the flag is cleared and the lock released later.
+ * The io-handler must take care that the flag is cleared and the lock released
+ * later.
  *
- * @param[out] err - Pointer to the error code (DB_SUCCESS or DB_TABLESPACE_DELETED).
+ * @param[out] err - Pointer to the error code (DB_SUCCESS or
+ * DB_TABLESPACE_DELETED).
  * @param mode - The mode of reading (BUF_READ_ANY_PAGE, ...).
  * @param space - The space id.
- * @param[in] tablespace_version - Prevents reading from a wrong version of the tablespace in case we have done DISCARD + IMPORT.
+ * @param[in] tablespace_version - Prevents reading from a wrong version of the
+ * tablespace in case we have done DISCARD + IMPORT.
  * @param offset - The page number.
  * @return Pointer to the block or nullptr.
  */
-buf_page_t *buf_page_init_for_read(db_err *err, ulint mode, space_id_t space, int64_t tablespace_version, page_no_t offset);
+buf_page_t *buf_page_init_for_read(db_err *err, ulint mode, space_id_t space,
+                                   int64_t tablespace_version,
+                                   page_no_t offset);
 
 /**
- * @brief Completes an asynchronous read or write request of a file page to or from the buffer pool.
- * 
+ * @brief Completes an asynchronous read or write request of a file page to or
+ * from the buffer pool.
+ *
  * @param bpage Pointer to the block in question.
  */
 void buf_page_io_complete(buf_page_t *bpage);
@@ -651,6 +679,8 @@ struct buf_block_t {
   /** true or false in hash indexing */
   bool curr_left_side;
 
+  /** Index for which the adaptive hash index has been created. */
+  dict_index_t *index;
   /* @} */
 
 #ifdef UNIV_SYNC_DEBUG
@@ -666,13 +696,15 @@ struct buf_block_t {
 /** Check if a buf_block_t object is in a valid state
 @param block	buffer block
 @return		true if valid */
-#define buf_block_state_valid(block) \
-  (buf_block_get_state(block) >= BUF_BLOCK_NOT_USED && (buf_block_get_state(block) <= BUF_BLOCK_REMOVE_HASH))
+#define buf_block_state_valid(block)                                           \
+  (buf_block_get_state(block) >= BUF_BLOCK_NOT_USED &&                         \
+   (buf_block_get_state(block) <= BUF_BLOCK_REMOVE_HASH))
 
 /** @brief The buffer pool statistics structure. */
 struct buf_pool_stat_t {
-  /** number of page gets performed; this field is NOT protected
-  by the buffer pool mutex */
+  /** number of page gets performed; also successful searches
+  through the adaptive hash index are counted as page gets;
+  this field is NOT protected by the buffer pool mutex */
   ulint n_page_gets;
 
   /** number read operations */
@@ -739,7 +771,7 @@ struct buf_pool_t {
   /* @{ */
 
   /** base node of the modified block list */
-  UT_LIST_BASE_NODE_T(buf_page_t)
+  UT_LIST_BASE_NODE_T(buf_page_t, list)
   flush_list;
 
   /** this is true when a flush of the given type is being initialized */
@@ -756,7 +788,8 @@ struct buf_pool_t {
   insertions in the flush_list. This tree contains blocks in order of
   oldest_modification LSN and is kept in sync with the flush_list.
   Each member of the tree MUST also be on the flush_list. This tree
-  is relevant only in recovery and is set to nullptr once the recovery is over. */
+  is relevant only in recovery and is set to nullptr once the recovery is over.
+*/
   ib_rbt_t *flush_rbt;
 
   /** a sequence number used to count the number of buffer blocks removed
@@ -774,10 +807,10 @@ struct buf_pool_t {
   /* @{ */
 
   /** base node of the free block list */
-  UT_LIST_BASE_NODE_T(buf_page_t) free;
+  UT_LIST_BASE_NODE_T(buf_page_t, list) free;
 
   /** base node of the LRU list */
-  UT_LIST_BASE_NODE_T(buf_page_t) LRU;
+  UT_LIST_BASE_NODE_T(buf_page_t, LRU) LRU;
 
   /** pointer to the about buf_LRU_old_ratio/BUF_LRU_OLD_RATIO_DIV oldest
   blocks in the LRU list; nullptr if LRU length less than BUF_LRU_OLD_MIN_LEN;
@@ -804,9 +837,9 @@ Use these instead of accessing buf_pool_mutex directly. */
 /** Test if buf_pool_mutex is owned. */
 #define buf_pool_mutex_own() mutex_own(&buf_pool_mutex)
 /** Acquire the buffer pool mutex. */
-#define buf_pool_mutex_enter()    \
-  do {                            \
-    mutex_enter(&buf_pool_mutex); \
+#define buf_pool_mutex_enter()                                                 \
+  do {                                                                         \
+    mutex_enter(&buf_pool_mutex);                                              \
   } while (0)
 
 #if defined UNIV_DEBUG || defined UNIV_BUF_DEBUG
@@ -815,25 +848,25 @@ Protected by buf_pool_mutex. */
 extern ulint buf_pool_mutex_exit_forbidden;
 
 /** Forbid the release of the buffer pool mutex. */
-#define buf_pool_mutex_exit_forbid() \
-  do {                               \
-    ut_ad(buf_pool_mutex_own());     \
-    buf_pool_mutex_exit_forbidden++; \
+#define buf_pool_mutex_exit_forbid()                                           \
+  do {                                                                         \
+    ut_ad(buf_pool_mutex_own());                                               \
+    buf_pool_mutex_exit_forbidden++;                                           \
   } while (0)
 
 /** Allow the release of the buffer pool mutex. */
-#define buf_pool_mutex_exit_allow()      \
-  do {                                   \
-    ut_ad(buf_pool_mutex_own());         \
-    ut_a(buf_pool_mutex_exit_forbidden); \
-    buf_pool_mutex_exit_forbidden--;     \
+#define buf_pool_mutex_exit_allow()                                            \
+  do {                                                                         \
+    ut_ad(buf_pool_mutex_own());                                               \
+    ut_a(buf_pool_mutex_exit_forbidden);                                       \
+    buf_pool_mutex_exit_forbidden--;                                           \
   } while (0)
 
 /** Release the buffer pool mutex. */
-#define buf_pool_mutex_exit()             \
-  do {                                    \
-    ut_a(!buf_pool_mutex_exit_forbidden); \
-    mutex_exit(&buf_pool_mutex);          \
+#define buf_pool_mutex_exit()                                                  \
+  do {                                                                         \
+    ut_a(!buf_pool_mutex_exit_forbidden);                                      \
+    mutex_exit(&buf_pool_mutex);                                               \
   } while (0)
 #else
 /** Forbid the release of the buffer pool mutex. */
@@ -863,7 +896,7 @@ READY_FOR_USE:
   is not in the page hash table
 
 MEMORY:
-	is not in free list
+        is not in free list
   is not in LRU list
   is not in flush list
   is not in the page hash table
@@ -972,14 +1005,14 @@ inline auto buf_page_get_state(const buf_page_t *bpage) {
 
 #ifdef UNIV_DEBUG
   switch (state) {
-    case BUF_BLOCK_NOT_USED:
-    case BUF_BLOCK_READY_FOR_USE:
-    case BUF_BLOCK_FILE_PAGE:
-    case BUF_BLOCK_MEMORY:
-    case BUF_BLOCK_REMOVE_HASH:
-      break;
-    default:
-      ut_error;
+  case BUF_BLOCK_NOT_USED:
+  case BUF_BLOCK_READY_FOR_USE:
+  case BUF_BLOCK_FILE_PAGE:
+  case BUF_BLOCK_MEMORY:
+  case BUF_BLOCK_REMOVE_HASH:
+    break;
+  default:
+    ut_error;
   }
 #endif /* UNIV_DEBUG */
 
@@ -1004,21 +1037,22 @@ inline void buf_page_set_state(buf_page_t *bpage, buf_page_state state) {
   buf_page_state old_state = buf_page_get_state(bpage);
 
   switch (old_state) {
-    case BUF_BLOCK_NOT_USED:
-      ut_a(state == BUF_BLOCK_READY_FOR_USE);
-      break;
-    case BUF_BLOCK_READY_FOR_USE:
-      ut_a(state == BUF_BLOCK_MEMORY || state == BUF_BLOCK_FILE_PAGE || state == BUF_BLOCK_NOT_USED);
-      break;
-    case BUF_BLOCK_MEMORY:
-      ut_a(state == BUF_BLOCK_NOT_USED);
-      break;
-    case BUF_BLOCK_FILE_PAGE:
-      ut_a(state == BUF_BLOCK_NOT_USED || state == BUF_BLOCK_REMOVE_HASH);
-      break;
-    case BUF_BLOCK_REMOVE_HASH:
-      ut_a(state == BUF_BLOCK_MEMORY);
-      break;
+  case BUF_BLOCK_NOT_USED:
+    ut_a(state == BUF_BLOCK_READY_FOR_USE);
+    break;
+  case BUF_BLOCK_READY_FOR_USE:
+    ut_a(state == BUF_BLOCK_MEMORY || state == BUF_BLOCK_FILE_PAGE ||
+         state == BUF_BLOCK_NOT_USED);
+    break;
+  case BUF_BLOCK_MEMORY:
+    ut_a(state == BUF_BLOCK_NOT_USED);
+    break;
+  case BUF_BLOCK_FILE_PAGE:
+    ut_a(state == BUF_BLOCK_NOT_USED || state == BUF_BLOCK_REMOVE_HASH);
+    break;
+  case BUF_BLOCK_REMOVE_HASH:
+    ut_a(state == BUF_BLOCK_MEMORY);
+    break;
   }
 #endif /* UNIV_DEBUG */
 
@@ -1044,13 +1078,13 @@ inline void buf_block_set_state(buf_block_t *block, buf_page_state state) {
  */
 inline bool buf_page_in_file(const buf_page_t *bpage) {
   switch (buf_page_get_state(bpage)) {
-    case BUF_BLOCK_FILE_PAGE:
-      return true;
-    case BUF_BLOCK_NOT_USED:
-    case BUF_BLOCK_READY_FOR_USE:
-    case BUF_BLOCK_MEMORY:
-    case BUF_BLOCK_REMOVE_HASH:
-      break;
+  case BUF_BLOCK_FILE_PAGE:
+    return true;
+  case BUF_BLOCK_NOT_USED:
+  case BUF_BLOCK_READY_FOR_USE:
+  case BUF_BLOCK_MEMORY:
+  case BUF_BLOCK_REMOVE_HASH:
+    break;
   }
 
   return false;
@@ -1077,12 +1111,12 @@ inline auto buf_page_get_flush_type(const buf_page_t *bpage) {
 
 #ifdef UNIV_DEBUG
   switch (flush_type) {
-    case BUF_FLUSH_LRU:
-    case BUF_FLUSH_SINGLE_PAGE:
-    case BUF_FLUSH_LIST:
-      return flush_type;
-    case BUF_FLUSH_N_TYPES:
-      break;
+  case BUF_FLUSH_LRU:
+  case BUF_FLUSH_SINGLE_PAGE:
+  case BUF_FLUSH_LIST:
+    return flush_type;
+  case BUF_FLUSH_N_TYPES:
+    break;
   }
   ut_error;
 #endif /* UNIV_DEBUG */
@@ -1108,7 +1142,8 @@ inline void buf_page_set_flush_type(buf_page_t *bpage, buf_flush flush_type) {
  * @param space Tablespace ID.
  * @param page_no Page number.
  */
-inline void buf_block_set_file_page(buf_block_t *block, space_id_t space, page_no_t page_no) {
+inline void buf_block_set_file_page(buf_block_t *block, space_id_t space,
+                                    page_no_t page_no) {
   buf_block_set_state(block, BUF_BLOCK_FILE_PAGE);
   block->page.space = space;
   block->page.offset = page_no;
@@ -1125,10 +1160,10 @@ inline auto buf_page_get_io_fix(const buf_page_t *bpage) {
 
 #ifdef UNIV_DEBUG
   switch (io_fix) {
-    case BUF_IO_NONE:
-    case BUF_IO_READ:
-    case BUF_IO_WRITE:
-      return io_fix;
+  case BUF_IO_NONE:
+  case BUF_IO_READ:
+  case BUF_IO_WRITE:
+    return io_fix;
   }
   ut_error;
 #endif /* UNIV_DEBUG */
@@ -1234,7 +1269,8 @@ inline void buf_page_set_old(buf_page_t *bpage, bool old) {
  * Determine the time of first access of a block in the buffer pool.
  *
  * @param bpage Pointer to the control block.
- * @return The time of first access (ut_time_ms()) if the block has been accessed, 0 otherwise.
+ * @return The time of first access (ut_time_ms()) if the block has been
+ * accessed, 0 otherwise.
  */
 inline unsigned buf_page_is_accessed(const buf_page_t *bpage) {
   ut_ad(buf_page_in_file(bpage));
@@ -1259,7 +1295,8 @@ inline void buf_page_set_accessed(buf_page_t *bpage, ulint time_ms) {
 }
 
 /**
- * Get the buf_block_t handle of a buffered file block if an uncompressed page frame exists, or nullptr.
+ * Get the buf_block_t handle of a buffered file block if an uncompressed page
+ * frame exists, or nullptr.
  *
  * @param bpage Pointer to the control block.
  * @return The control block if an uncompressed page frame exists, or nullptr.
@@ -1285,16 +1322,16 @@ inline buf_block_t *buf_page_get_block(buf_page_t *bpage) {
  */
 inline buf_frame_t *buf_block_get_frame(const buf_block_t *block) {
   switch (buf_block_get_state(block)) {
-    case BUF_BLOCK_NOT_USED:
-      ut_error;
-      break;
-    case BUF_BLOCK_FILE_PAGE:
-      ut_a(block->page.buf_fix_count > 0);
-      /* fall through */
-    case BUF_BLOCK_READY_FOR_USE:
-    case BUF_BLOCK_MEMORY:
-    case BUF_BLOCK_REMOVE_HASH:
-      goto ok;
+  case BUF_BLOCK_NOT_USED:
+    ut_error;
+    break;
+  case BUF_BLOCK_FILE_PAGE:
+    ut_a(block->page.buf_fix_count > 0);
+    /* fall through */
+  case BUF_BLOCK_READY_FOR_USE:
+  case BUF_BLOCK_MEMORY:
+  case BUF_BLOCK_REMOVE_HASH:
+    goto ok;
   }
   ut_error;
 ok:
@@ -1354,13 +1391,15 @@ inline ulint buf_block_get_page_no(const buf_block_t *block) {
 }
 
 /**
- * @brief Gets the space id, page offset, and byte offset within page of a pointer pointing to a buffer frame containing a file page.
+ * @brief Gets the space id, page offset, and byte offset within page of a
+ * pointer pointing to a buffer frame containing a file page.
  *
  * @param ptr Pointer to a buffer frame.
  * @param space Pointer to store the space id.
  * @param addr Pointer to store the page offset and byte offset.
  */
-inline void buf_ptr_get_fsp_addr(const void *ptr, ulint *space, fil_addr_t *addr) {
+inline void buf_ptr_get_fsp_addr(const void *ptr, ulint *space,
+                                 fil_addr_t *addr) {
   const page_t *page = (const page_t *)ut_align_down(ptr, UNIV_PAGE_SIZE);
 
   *space = mach_read_from_4(page + FIL_PAGE_SPACE_ID);
@@ -1369,7 +1408,8 @@ inline void buf_ptr_get_fsp_addr(const void *ptr, ulint *space, fil_addr_t *addr
 }
 
 /**
- * Gets the hash value of the page the pointer is pointing to. This can be used in searches in the lock hash table.
+ * Gets the hash value of the page the pointer is pointing to. This can be used
+ * in searches in the lock hash table.
  *
  * @param block Pointer to the buffer block.
  * @return Lock hash value.
@@ -1378,9 +1418,8 @@ inline ulint buf_block_get_lock_hash_val(const buf_block_t *block) {
   ut_ad(buf_page_in_file(&block->page));
 
 #ifdef UNIV_SYNC_DEBUG
-  ut_ad(
-    rw_lock_own(&(((buf_block_t *)block)->lock), RW_LOCK_EXCLUSIVE) || rw_lock_own(&(((buf_block_t *)block)->lock), RW_LOCK_SHARED)
-  );
+  ut_ad(rw_lock_own(&(((buf_block_t *)block)->lock), RW_LOCK_EXCLUSIVE) ||
+        rw_lock_own(&(((buf_block_t *)block)->lock), RW_LOCK_SHARED));
 #endif /* UNIV_SYNC_DEBUG */
 
   return block->lock_hash_val;
@@ -1410,7 +1449,8 @@ inline byte *buf_frame_copy(byte *buf, const buf_frame_t *frame) {
 }
 
 /**
- * @brief Calculates a folded value of a file page address to use in the page hash table.
+ * @brief Calculates a folded value of a file page address to use in the page
+ * hash table.
  *
  * @param space Space id.
  * @param offset Offset of the page within space.
@@ -1447,14 +1487,15 @@ inline lsn_t buf_page_get_newest_modification(const buf_page_t *bpage) {
 
 /**
  * @brief Increments the modify clock of a frame by 1.
- * The caller must (1) own the buf_pool mutex and block bufferfix count has to be zero,
- * (2) or own an x-lock on the block.
+ * The caller must (1) own the buf_pool mutex and block bufferfix count has to
+ * be zero, (2) or own an x-lock on the block.
  *
  * @param block Pointer to the buffer block.
  */
 inline void buf_block_modify_clock_inc(buf_block_t *block) {
 #ifdef UNIV_SYNC_DEBUG
-  ut_ad((buf_pool_mutex_own() && (block->page.buf_fix_count == 0)) || rw_lock_own(&(block->lock), RW_LOCK_EXCLUSIVE));
+  ut_ad((buf_pool_mutex_own() && (block->page.buf_fix_count == 0)) ||
+        rw_lock_own(&(block->lock), RW_LOCK_EXCLUSIVE));
 #endif /* UNIV_SYNC_DEBUG */
 
   block->modify_clock++;
@@ -1469,7 +1510,8 @@ inline void buf_block_modify_clock_inc(buf_block_t *block) {
  */
 inline uint64_t buf_block_get_modify_clock(buf_block_t *block) {
 #ifdef UNIV_SYNC_DEBUG
-  ut_ad(rw_lock_own(&(block->lock), RW_LOCK_SHARED) || rw_lock_own(&(block->lock), RW_LOCK_EXCLUSIVE));
+  ut_ad(rw_lock_own(&(block->lock), RW_LOCK_SHARED) ||
+        rw_lock_own(&(block->lock), RW_LOCK_EXCLUSIVE));
 #endif /* UNIV_SYNC_DEBUG */
 
   return block->modify_clock;
@@ -1483,7 +1525,8 @@ inline uint64_t buf_block_get_modify_clock(buf_block_t *block) {
  * @param line Line number.
  * @param block Pointer to the buffer block.
  */
-inline void buf_block_buf_fix_inc_func(const char *file, ulint line, buf_block_t *block)
+inline void buf_block_buf_fix_inc_func(const char *file, ulint line,
+                                       buf_block_t *block)
 #else  /* UNIV_SYNC_DEBUG */
 /**
  * @brief Increments the bufferfix count.
@@ -1521,7 +1564,8 @@ inline void buf_block_buf_fix_inc_func(buf_block_t *block)
 /**
  * @brief Decrements the bufferfix count.
  *
- * This function decrements the bufferfix count of a block, indicating that the block is no longer fixed in the buffer pool.
+ * This function decrements the bufferfix count of a block, indicating that the
+ * block is no longer fixed in the buffer pool.
  *
  * @param block Pointer to the buffer block.
  */
@@ -1538,7 +1582,8 @@ inline void buf_block_buf_fix_dec(buf_block_t *block) {
 /**
  * @brief Returns the control block of a file page, nullptr if not found.
  *
- * This function retrieves the control block of a file page based on the space id and offset.
+ * This function retrieves the control block of a file page based on the space
+ * id and offset.
  *
  * @param space The space id of the page.
  * @param offset The offset of the page within the space.
@@ -1552,15 +1597,9 @@ inline buf_page_t *buf_page_hash_get(space_id_t space, ulint offset) {
 
   buf_page_t *bpage;
 
-  HASH_SEARCH(
-    hash,
-    buf_pool->page_hash,
-    fold,
-    buf_page_t *,
-    bpage,
-    ut_ad(bpage->in_page_hash && buf_page_in_file(bpage)),
-    bpage->space == space && bpage->offset == offset
-  );
+  HASH_SEARCH(hash, buf_pool->page_hash, fold, buf_page_t *, bpage,
+              ut_ad(bpage->in_page_hash && buf_page_in_file(bpage)),
+              bpage->space == space && bpage->offset == offset);
 
   if (bpage != nullptr) {
     ut_a(buf_page_in_file(bpage));
@@ -1574,7 +1613,8 @@ inline buf_page_t *buf_page_hash_get(space_id_t space, ulint offset) {
 /**
  * @brief Returns the control block of a file page.
  *
- * This function retrieves the control block of a file page based on the space id and offset.
+ * This function retrieves the control block of a file page based on the space
+ * id and offset.
  *
  * @param space The space id of the page.
  * @param offset The offset of the page within the space.
@@ -1607,8 +1647,8 @@ inline bool buf_page_peek(space_id_t space, ulint offset) {
 /**
  * @brief Adds latch level info for the rw-lock protecting the buffer frame.
  *
- * This should be called in the debug version after a successful latching of a page
- * if we know the latching order level of the acquired latch.
+ * This should be called in the debug version after a successful latching of a
+ * page if we know the latching order level of the acquired latch.
  *
  * @param block The buffer page where we have acquired latch.
  * @param level The latching order level.

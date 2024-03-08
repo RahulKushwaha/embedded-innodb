@@ -158,14 +158,14 @@ struct mem_block_info_struct {
   /*!< line number where the mem heap was created */
   ulint line;
 
-  /* In the first block in the the list this is the base
-  node of the list of blocks; in subsequent blocks this is undefined */
-  UT_LIST_BASE_NODE_T(mem_block_t) base;
-
   /* This contains pointers to next and prev in the list. The first
   block allocated to the heap is also the first block in this list,
   though it also contains the base node of the list. */
   UT_LIST_NODE_T(mem_block_t) list;
+
+  /* In the first block in the list this is the base
+node of the list of blocks; in subsequent blocks this is undefined */
+  UT_LIST_BASE_NODE_T(mem_block_t, list) base;
 
   /*!< physical length of this block in bytes */
   ulint len;
@@ -198,6 +198,8 @@ struct mem_block_info_struct {
   UT_LIST_NODE_T(mem_block_t) mem_block_list;
 #endif /* UNIV_DEBUG */
 };
+
+UT_LIST_NODE_GETTER_DEFINITION(mem_block_t, list);
 
 #define MEM_BLOCK_MAGIC_N 764741555
 #define MEM_FREED_BLOCK_MAGIC_N 547711122
@@ -465,7 +467,7 @@ inline mem_heap_t *mem_heap_create_func(
   UT_LIST_INIT(block->base);
 
   /* Add the created block itself as the first block in the list */
-  UT_LIST_ADD_FIRST(list, block->base, block);
+  UT_LIST_ADD_FIRST(block->base, block);
 
   return block;
 }
