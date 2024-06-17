@@ -346,7 +346,7 @@ bool Buf_pool::is_corrupted(const byte *read_buf) {
         ib_stream,
         "  Error: page %lu log sequence number %llu is in the future! Current system"
         " log sequence number %llu. Your database may be corrupt or you may have copied"
-        " the InnoDB tablespace but not the InnoDB log files.", 
+        " the InnoDB tablespace but not the InnoDB log files.",
         (ulong)mach_read_from_4(read_buf + FIL_PAGE_OFFSET),
         (long long unsigned int)mach_read_from_8(read_buf + FIL_PAGE_LSN),
         (long long unsigned int)current_lsn
@@ -1807,7 +1807,7 @@ ulint Buf_pool::get_latched_pages_number() {
 #endif /* UNIV_DEBUG */
 
 ulint Buf_pool::get_n_pending_ios() {
-  return 
+  return
     m_n_pend_reads + m_n_flush[BUF_FLUSH_LRU] + m_n_flush[BUF_FLUSH_LIST] +
     m_n_flush[BUF_FLUSH_SINGLE_PAGE];
 }

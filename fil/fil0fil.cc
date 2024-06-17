@@ -1560,8 +1560,17 @@ bool fil_delete_tablespace(space_id_t id) {
   is_being_deleted also prevents fil_flush() from being applied to this
   tablespace. */
 
-  srv_buf_pool->m_LRU->invalidate_tablespace(id);
+  ib_logger(ib_stream, "All Pages in Buffer Pool relevant to truncating tablespace\n");
+  for (auto [space_id, page_no] : srv_buf_pool->m_flusher->allPages()) {
+    if (space_id == id) {
+      ib_logger(ib_stream, "LRU Page tablespace id: %lu, page_no: %lu\n", space_id, page_no);
+    }
+  }
+  ib_logger(ib_stream, "\n");
 
+  //  srv_buf_pool->m_LRU->invalidate_tablespace(id);
+
+  ib_logger(ib_stream, "truncated tablespace id: %lu\n", id);
   success = fil_space_free(id, false);
 
   if (success) {
