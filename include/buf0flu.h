@@ -25,8 +25,8 @@ Created 11/5/1995 Heikki Tuuri
 
 #include "innodb0types.h"
 
-#include "buf0types.h"
 #include "buf0buf.h"
+#include "buf0types.h"
 #include "mtr0mtr.h"
 #include "ut0byte.h"
 
@@ -103,6 +103,18 @@ struct Buf_flush {
    */
   ulint batch(buf_flush flush_type, ulint min_n, uint64_t lsn_limit);
 
+  std::vector<std::pair<space_id_t, page_no_t>> allPages() {
+    std::vector<std::pair<space_id_t, page_no_t>> pages;
+    buf_pool_mutex_enter();
+    buf_page_t *page = UT_LIST_GET_LAST(srv_buf_pool->m_LRU_list);
+    while (page) {
+      pages.emplace_back(page->m_space, page->m_page_no);
+      page = UT_LIST_GET_PREV(m_LRU_list, page);
+    }
+    buf_pool_mutex_exit();
+    return pages;
+  }
+
   /**
    * Waits until a flush batch of the given type ends.
    *
@@ -178,34 +190,34 @@ struct Buf_flush {
    * @param block The block which is modified.
    * @param mtr The mini-transaction.
    */
-  void note_modification( buf_block_t *block, mtr_t *mtr) {
+  void note_modification(buf_block_t *block, mtr_t *mtr) {
     ut_ad(block);
     ut_ad(block->get_state() == BUF_BLOCK_FILE_PAGE);
     ut_ad(block->m_page.m_buf_fix_count > 0);
-  #ifdef UNIV_SYNC_DEBUG
+#ifdef UNIV_SYNC_DEBUG
     ut_ad(rw_lock_own(&(block->lock), RW_LOCK_EX));
-  #endif /* UNIV_SYNC_DEBUG */
+#endif /* UNIV_SYNC_DEBUG */
     ut_ad(buf_pool_mutex_own());
-  
+
     ut_ad(mtr->start_lsn != 0);
     ut_ad(mtr->modifications);
     ut_ad(block->m_page.m_newest_modification <= mtr->end_lsn);
-  
+
     block->m_page.m_newest_modification = mtr->end_lsn;
-  
+
     if (!block->m_page.m_oldest_modification) {
-  
+
       block->m_page.m_oldest_modification = mtr->start_lsn;
       ut_ad(block->m_page.m_oldest_modification != 0);
-  
+
       insert_into_flush_list(block);
     } else {
       ut_ad(block->m_page.m_oldest_modification <= mtr->start_lsn);
     }
-  
+
     ++srv_buf_pool_write_requests;
   }
-  
+
   /**
    * @brief This function should be called when recovery has modified a buffer page.
    *
@@ -213,46 +225,42 @@ struct Buf_flush {
    * @param start_lsn The start LSN of the first MTR in a set of MTRs.
    * @param end_lsn The end LSN of the last MTR in the set of MTRs.
    */
-  void recv_note_modification( buf_block_t *block, uint64_t start_lsn, uint64_t end_lsn) {
+  void recv_note_modification(buf_block_t *block, uint64_t start_lsn, uint64_t end_lsn) {
     ut_ad(block);
     ut_ad(block->get_state() == BUF_BLOCK_FILE_PAGE);
     ut_ad(block->m_page.m_buf_fix_count > 0);
-  
-  #ifdef UNIV_SYNC_DEBUG
+
+#ifdef UNIV_SYNC_DEBUG
     ut_ad(rw_lock_own(&(block->lock), RW_LOCK_EX));
-  #endif /* UNIV_SYNC_DEBUG */
-  
+#endif /* UNIV_SYNC_DEBUG */
+
     buf_pool_mutex_enter();
-  
+
     ut_ad(block->m_page.m_newest_modification <= end_lsn);
-  
+
     block->m_page.m_newest_modification = end_lsn;
-  
+
     if (!block->m_page.m_oldest_modification) {
-  
+
       block->m_page.m_oldest_modification = start_lsn;
-  
+
       ut_ad(block->m_page.m_oldest_modification != 0);
-  
+
       insert_sorted_into_flush_list(block);
     } else {
       ut_ad(block->m_page.m_oldest_modification <= start_lsn);
     }
-  
+
     buf_pool_mutex_exit();
   }
 
   /** When free_margin is called, it tries to make this many blocks
   available to replacement in the free list and at the end of the LRU list (to
   make sure that a read-ahead batch can be read efficiently in a single sweep). */
-  auto get_free_block_margin() const {
-    return 5 + srv_buf_pool->get_read_ahead_area();
-  }
+  auto get_free_block_margin() const { return 5 + srv_buf_pool->get_read_ahead_area(); }
 
   /** Extra margin to apply above the free block margin */
-  auto get_extra_margin() const {
-    return get_free_block_margin() / 4 + 100;
-  }
+  auto get_extra_margin() const { return get_free_block_margin() / 4 + 100; }
 
 #if defined UNIV_DEBUG
   /** Validates the flush list.
@@ -271,12 +279,12 @@ struct Buf_flush {
   struct Stat {
     /** Amount of redo generated. */
     uint64_t m_redo{};
-  
+
     /** Number of pages flushed. */
     ulint m_n_flushed{};
   };
 
-private:
+ private:
   /**
    * @brief Insert a block in the m_recovery_flush_list and returns a pointer to its predecessor or nullptr if no predecessor.
    * The ordering is maintained on the basis of the <oldest_modification, space, offset> key.
@@ -367,8 +375,7 @@ private:
    */
   bool ready_for_flush(buf_page_t *bpage, buf_flush flush_type);
 
-
-private:
+ private:
   /** Sampled values buf_pool->m_flusher->stat_cur.
   Not protected by any mutex.  Updated by buf_pool->m_flusher->stat_update(). */
   std::array<Stat, STAT_N_INTERVAL> m_stats;
@@ -386,6 +393,5 @@ private:
   /** Number of pages flushed through non m_flush_list flushes. */
   ulint m_LRU_flush_page_count{};
 
-/* @} */
-
+  /* @} */
 };
