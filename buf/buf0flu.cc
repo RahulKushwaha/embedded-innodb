@@ -256,7 +256,9 @@ void Buf_flush::remove(buf_page_t *bpage) {
 
   bpage->m_oldest_modification = 0;
 
-  auto check = [](const buf_page_t *ptr) { ut_ad(ptr->m_in_flush_list); };
+  auto check = [](const buf_page_t *ptr) {
+    ut_ad(ptr->m_in_flush_list);
+  };
   ut_list_validate(srv_buf_pool->m_flush_list, check);
 }
 
@@ -332,7 +334,7 @@ void Buf_flush::write_complete(buf_page_t *bpage) {
 }
 
 void Buf_flush::sync_datafiles() {
-  /* Wait until all pending async writes are completed */ 
+  /* Wait until all pending async writes are completed */
   srv_aio->wait_for_pending_ops(aio::WRITE);
 
   /* Now we flush the data to disk (for example, with fsync) */
@@ -374,7 +376,8 @@ void Buf_flush::buffered_writes() {
       continue;
     }
 
-    if (unlikely(memcmp(block->m_frame + (FIL_PAGE_LSN + 4), block->m_frame + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4))) {
+    if (unlikely(memcmp(block->m_frame + (FIL_PAGE_LSN + 4), block->m_frame + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4)
+        )) {
       ut_print_timestamp(ib_stream);
       ib_logger(
         ib_stream,
@@ -424,21 +427,15 @@ void Buf_flush::buffered_writes() {
   write_buf = trx_doublewrite->write_buf;
   ulint i = 0;
 
-  fil_io(IO_request::Sync_write,
-         false,
-	        TRX_SYS_SPACE,
-          trx_doublewrite->block1,
-          0,
-          len,
-          write_buf,
-          nullptr);
+  fil_io(IO_request::Sync_write, false, TRX_SYS_SPACE, trx_doublewrite->block1, 0, len, write_buf, nullptr);
 
   for (len2 = 0; len2 + UNIV_PAGE_SIZE <= len; len2 += UNIV_PAGE_SIZE, i++) {
     const buf_block_t *block = (buf_block_t *)trx_doublewrite->buf_block_arr[i];
 
     if (likely(block->get_state() == BUF_BLOCK_FILE_PAGE) &&
-        unlikely(memcmp(write_buf + len2 + (FIL_PAGE_LSN + 4),
-                        write_buf + len2 + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4))) {
+        unlikely(
+          memcmp(write_buf + len2 + (FIL_PAGE_LSN + 4), write_buf + len2 + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4)
+        )) {
 
       ut_print_timestamp(ib_stream);
       ib_logger(
@@ -466,7 +463,9 @@ void Buf_flush::buffered_writes() {
     const buf_block_t *block = (buf_block_t *)trx_doublewrite->buf_block_arr[i];
 
     if (likely(block->get_state() == BUF_BLOCK_FILE_PAGE) &&
-        unlikely(memcmp(write_buf + len2 + (FIL_PAGE_LSN + 4), write_buf + len2 + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4))) {
+        unlikely(
+          memcmp(write_buf + len2 + (FIL_PAGE_LSN + 4), write_buf + len2 + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4)
+        )) {
       ut_print_timestamp(ib_stream);
       ib_logger(
         ib_stream,
@@ -495,13 +494,15 @@ flush:
 
     ut_a(block->get_state() == BUF_BLOCK_FILE_PAGE);
 
-    if (unlikely(memcmp(block->m_frame + (FIL_PAGE_LSN + 4), block->m_frame + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4))) {
-      log_err(
-        std::format(
+    if (unlikely(memcmp(block->m_frame + (FIL_PAGE_LSN + 4), block->m_frame + (UNIV_PAGE_SIZE - FIL_PAGE_END_LSN_OLD_CHKSUM + 4), 4)
+        )) {
+      log_err(std::format(
         "The page to be written seems corrupt! The lsn fields do not match! Noticed in the buffer pool"
         " after posting and flushing the doublewrite buffer. Page buf fix count {}, io fix {}, state {}",
-        (int) block->m_page.m_buf_fix_count, (int) buf_block_get_io_fix(block), (int) block->get_state())
-      );
+        (int)block->m_page.m_buf_fix_count,
+        (int)buf_block_get_io_fix(block),
+        (int)block->get_state()
+      ));
     }
 
     fil_io(
@@ -545,7 +546,9 @@ try_again:
 
   ut_a(bpage->get_state() == BUF_BLOCK_FILE_PAGE);
 
-  memcpy(trx_doublewrite->write_buf + UNIV_PAGE_SIZE * trx_doublewrite->first_free, ((buf_block_t *)bpage)->m_frame, UNIV_PAGE_SIZE);
+  memcpy(
+    trx_doublewrite->write_buf + UNIV_PAGE_SIZE * trx_doublewrite->first_free, ((buf_block_t *)bpage)->m_frame, UNIV_PAGE_SIZE
+  );
 
   trx_doublewrite->buf_block_arr[trx_doublewrite->first_free] = bpage;
 
@@ -615,19 +618,37 @@ void Buf_flush::write_block_low(buf_page_t *bpage) {
   }
 
   if (!srv_use_doublewrite_buf || !trx_doublewrite) {
-    fil_io(
-      IO_request::Async_write,
-      true,
-      bpage->get_space(),
-      bpage->get_page_no(),
-      0,
-      UNIV_PAGE_SIZE,
-      frame,
-      bpage
-    );
+    fil_io(IO_request::Async_write, true, bpage->get_space(), bpage->get_page_no(), 0, UNIV_PAGE_SIZE, frame, bpage);
   } else {
     post_to_doublewrite_buf(bpage);
   }
+}
+
+inline static bool free_page_if_truncated(buf_page_t *bpage) {
+  ut_a(bpage != nullptr);
+  auto block_mutex = buf_page_get_mutex(bpage);
+
+  ut_ad(buf_pool_mutex_own());
+  ut_ad(mutex_own(block_mutex));
+
+  auto space = bpage->get_space();
+  bool table_truncated = fil_tablespace_deleted_or_being_deleted_in_mem(space, -1);
+
+  bool page_from_flush_list = bpage->m_in_flush_list;
+
+  if (table_truncated) {
+    ib_logger(ib_stream, "freeing a page from truncated table, tablespace_id: %lu, page_no: %lu\n", space, bpage->m_page_no);
+    // Here we free up the page.
+    srv_buf_pool->m_LRU->free_block(bpage, nullptr);
+
+    if (page_from_flush_list) {
+      srv_buf_pool->m_flusher->remove(bpage);
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 void Buf_flush::page(buf_page_t *bpage, buf_flush flush_type) {
@@ -704,7 +725,7 @@ void Buf_flush::page(buf_page_t *bpage, buf_flush flush_type) {
       ut_error;
   }
 
-    /* Even though bpage is not protected by any mutex at this
+  /* Even though bpage is not protected by any mutex at this
   point, it is safe to access bpage, because it is io_fixed and
   m_oldest_modification != 0.  Thus, it cannot be relocated in the
   buffer pool or removed from m_flush_list or LRU_list. */
@@ -753,6 +774,14 @@ ulint Buf_flush::try_neighbors(ulint space, ulint offset, buf_flush flush_type) 
       continue;
     }
 
+    mutex_t *block_mtx = buf_page_get_mutex(bpage);
+    mutex_enter(block_mtx);
+    if (free_page_if_truncated(bpage)) {
+      mutex_exit(block_mtx);
+      continue;
+    }
+    mutex_exit(block_mtx);
+
     ut_a(bpage->in_file());
 
     /* We avoid flushing 'non-old' blocks in an LRU flush,
@@ -788,7 +817,7 @@ ulint Buf_flush::try_neighbors(ulint space, ulint offset, buf_flush flush_type) 
   return (count);
 }
 
-ulint Buf_flush::batch( buf_flush flush_type, ulint min_n, uint64_t lsn_limit) {
+ulint Buf_flush::batch(buf_flush flush_type, ulint min_n, uint64_t lsn_limit) {
   buf_page_t *bpage;
   ulint page_count = 0;
   ulint space;
@@ -844,12 +873,14 @@ ulint Buf_flush::batch( buf_flush flush_type, ulint min_n, uint64_t lsn_limit) {
 
     do {
       mutex_t *block_mutex = buf_page_get_mutex(bpage);
-      bool ready;
+      bool ready{false};
 
       ut_a(bpage->in_file());
 
       mutex_enter(block_mutex);
-      ready = ready_for_flush(bpage, flush_type);
+      if (!free_page_if_truncated(bpage)) {
+        ready = ready_for_flush(bpage, flush_type);
+      }
       mutex_exit(block_mutex);
 
       if (ready) {

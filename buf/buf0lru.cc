@@ -827,7 +827,7 @@ ulint Buf_LRU::old_ratio_update(ulint old_pct, bool adjust) {
   if (adjust) {
     buf_pool_mutex_enter();
 
-    auto buf_LRU = srv_buf_pool->m_LRU;
+    auto buf_LRU = srv_buf_pool->m_LRU.get();
 
     if (ratio != buf_LRU->m_old_ratio) {
 
