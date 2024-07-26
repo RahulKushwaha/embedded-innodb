@@ -25,3 +25,5 @@ jobs:
         run: cmake -G "Unix Makefiles" .
       - name: make
         run: make
+      - name: run tests
+        run: bin/ib_test1
