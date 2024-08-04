@@ -156,9 +156,7 @@ void recv_sys_close(void) {
 
 void recv_sys_mem_free() {
   if (recv_sys != nullptr) {
-    if (recv_sys->addr_hash != nullptr) {
-      delete recv_sys->addr_hash;
-    }
+    delete recv_sys->addr_hash;
 
     if (recv_sys->heap != nullptr) {
       mem_heap_free(recv_sys->heap);
@@ -826,7 +824,7 @@ static recv_addr_t *recv_get_fil_addr_struct(
   ulint page_no
 ) /*!< in: page number */
 {
-  if (auto itr = recv_sys->addr_hash->find(std::make_pair(space, page_no)); itr != recv_sys->addr_hash->end()) {
+  if (auto itr = recv_sys->addr_hash->find(Page_id{space, page_no}); itr != recv_sys->addr_hash->end()) {
     return itr->second;
   }
 
@@ -876,7 +874,7 @@ static void recv_add_to_hash_table(
 
     UT_LIST_INIT(recv_addr->rec_list);
 
-    recv_sys->addr_hash->emplace(std::make_pair(space, page_no), recv_addr);
+    recv_sys->addr_hash->emplace(Page_id{space, page_no}, recv_addr);
     recv_sys->n_addrs++;
   }
 
