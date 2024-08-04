@@ -28,7 +28,6 @@ Created 5/7/1996 Heikki Tuuri
 #include "buf0types.h"
 #include "dict0dict.h"
 #include "dict0types.h"
-#include "hash0hash.h"
 #include "innodb0types.h"
 #include "lock0types.h"
 #include "log0recv.h"
@@ -432,23 +431,6 @@ void lock_remove_all_on_table(
 ); /*!< in: also removes
                                    table S and X locks */
 
-/** Calculates the fold value of a page file address: used in inserting or
-searching for a lock in the hash table.
-@return	folded value */
-inline ulint lock_rec_fold(
-  ulint space, /*!< in: space */
-  ulint page_no
-) /*!< in: page number */
-  __attribute__((const));
-
-/** Calculates the hash value of a page file address: used in inserting or
-searching for a lock in the hash table.
-@return	hashed value */
-inline ulint lock_rec_hash(
-  ulint space, /*!< in: space */
-  ulint page_no
-); /*!< in: page number */
-
 /** Looks for a set bit in a record lock bitmap. Returns ULINT_UNDEFINED,
 if none found.
 @return bit index == heap number of the record, or ULINT_UNDEFINED if
@@ -652,22 +634,12 @@ struct lock_op_struct {
 
 /** The lock system struct */
 struct lock_sys_t {
-  hash_table_t *rec_hash; /*!< hash table of the record locks */
+  using lock_map_t = std::unordered_map<Page_id, Lock *, Page_id_hash>;
+  lock_map_t *rec_hash; /*!< hash table of the record locks */
 };
 
 /** The lock system */
 extern lock_sys_t *lock_sys;
-
-/** Calculates the fold value of a page file address: used in inserting or
-searching for a lock in the hash table.
-@return	folded value */
-inline ulint lock_rec_fold(
-  ulint space, /*!< in: space */
-  ulint page_no
-) /*!< in: page number */
-{
-  return (ut_fold_ulint_pair(space, page_no));
-}
 
 /** Calculates the hash value of a page file address: used in inserting or
 searching for a lock in the hash table.
@@ -677,7 +649,7 @@ inline ulint lock_rec_hash(
   ulint page_no
 ) /*!< in: page number */
 {
-  return (hash_calc_hash(lock_rec_fold(space, page_no), lock_sys->rec_hash));
+  return Page_id_hash()(Page_id(space, page_no));
 }
 
 /** Checks if some transaction has an implicit x-lock on a record in a clustered
@@ -719,7 +691,6 @@ inline ulint lock_get_min_heap_no(const buf_block_t *block) /*!< in: buffer bloc
   }
 }
 
-
 #ifdef UNIT_TESTING
 /** Creates a new record lock and inserts it to the lock queue. Does NOT check
 for deadlocks or lock compatibility!
@@ -732,14 +703,8 @@ for deadlocks or lock compatibility!
 @param[in,out] trx              Transaction that wants to create the record lock.
 @return	created lock */
 Lock *lock_rec_create_low(
-  ulint type_mode,
-  space_id_t space,
-  page_no_t page_no,
-  ulint heap_no,
-  ulint n_bits,
-  dict_index_t *index,
-  trx_t *trx);
-
+  ulint type_mode, space_id_t space, page_no_t page_no, ulint heap_no, ulint n_bits, dict_index_t *index, trx_t *trx
+);
 
 /** Check if a transaction has any other transaction waiting on its locks.
 @param[in] trx                  Transaction to check.
@@ -747,4 +712,3 @@ Lock *lock_rec_create_low(
 bool lock_trx_has_no_waiters(const trx_t *trx);
 
 #endif /* UNIT_TESTING */
-

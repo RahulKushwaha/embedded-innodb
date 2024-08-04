@@ -296,7 +296,7 @@ locks on the inserted record. */
  * statement-level MySQL binlog.
  * See also lock_mode_compatible().
  */
-#define LK(a, b) (1 << ((a)*LOCK_NUM + (b)))
+#define LK(a, b) (1 << ((a) * LOCK_NUM + (b)))
 #define LKS(a, b) LK(a, b) | LK(b, a)
 
 /* Define the lock compatibility matrix in a ulint.  The first line below
@@ -372,10 +372,10 @@ the search again in this last case because there may be another
 deadlock!
 LOCK_EXCEED_MAX_DEPTH if the lock search exceeds max steps or max depth. */
 static ulint lock_deadlock_recursive(
-  trx_t *start,      /*!< in: recursion starting point */
-  trx_t *trx,        /*!< in: a transaction waiting for a lock */
+  trx_t *start,    /*!< in: recursion starting point */
+  trx_t *trx,      /*!< in: a transaction waiting for a lock */
   Lock *wait_lock, /*!< in:  lock that is waiting to be granted */
-  ulint *cost,       /*!< in/out: number of calculation steps thus
+  ulint *cost,     /*!< in/out: number of calculation steps thus
                        far: if this exceeds LOCK_MAX_N_STEPS_...
                        we return LOCK_EXCEED_MAX_DEPTH */
   ulint depth
@@ -496,7 +496,7 @@ ulint lock_sec_rec_cons_read_sees(const rec_t *rec, const read_view_t *view) {
 void lock_sys_create(ulint n_cells) {
   lock_sys = static_cast<lock_sys_t *>(mem_alloc(sizeof(lock_sys_t)));
 
-  lock_sys->rec_hash = hash_create(n_cells);
+  lock_sys->rec_hash = new lock_sys_t::lock_map_t{};
 
   /* hash_create_mutexes(lock_sys->rec_hash, 2, SYNC_REC_LOCK); */
 
@@ -511,8 +511,7 @@ void lock_sys_close() {
   }
 
   /* hash_free_mutexes(lock_sys->rec_hash); */
-  hash_table_free(lock_sys->rec_hash);
-  lock_sys->rec_hash = nullptr;
+  delete lock_sys->rec_hash;
 
   if (lock_latest_err_stream != nullptr) {
     fclose(lock_latest_err_stream);
@@ -871,9 +870,7 @@ file address.
 inline Lock *lock_rec_get_first_on_page_addr(space_id_t space, page_no_t page_no) {
   ut_ad(mutex_own(&kernel_mutex));
 
-  for (auto lock = static_cast<Lock *>(HASH_GET_FIRST(lock_sys->rec_hash, lock_rec_hash(space, page_no)));
-       lock != nullptr;
-       lock = static_cast<Lock *>(HASH_GET_NEXT(hash, lock))) {
+  for (const auto [page_id, lock] : *lock_sys->rec_hash) {
 
     if ((lock->un_member.rec_lock.space == space) && (lock->un_member.rec_lock.page_no == page_no)) {
       return lock;
@@ -901,11 +898,8 @@ inline Lock *lock_rec_get_first_on_page(const buf_block_t *block) {
 
   const auto space = block->get_space();
   const auto page_no = block->get_page_no();
-  auto hash = buf_block_get_lock_hash_val(block);
 
-  for (auto lock = static_cast<Lock *>(HASH_GET_FIRST(lock_sys->rec_hash, hash));
-       lock != nullptr;
-       lock = static_cast<Lock *>(HASH_GET_NEXT(hash, lock))) {
+  for (const auto &[page_id, lock] : *lock_sys->rec_hash) {
 
     if (lock->un_member.rec_lock.space == space && lock->un_member.rec_lock.page_no == page_no) {
       return lock;
@@ -933,9 +927,7 @@ inline Lock *lock_rec_get_next(ulint heap_no, Lock *lock) {
 inline Lock *lock_rec_get_first(const buf_block_t *block, ulint heap_no) {
   ut_ad(mutex_own(&kernel_mutex));
 
-  for (auto lock = lock_rec_get_first_on_page(block);
-       lock != nullptr;
-       lock = lock_rec_get_next_on_page(lock)) {
+  for (auto lock = lock_rec_get_first_on_page(block); lock != nullptr; lock = lock_rec_get_next_on_page(lock)) {
 
     if (lock_rec_get_nth_bit(lock, heap_no)) {
       return lock;
@@ -1008,9 +1000,7 @@ inline Lock *lock_table_has(trx_t *trx, dict_table_t *table, Lock_mode mode) {
 
   /* Look for stronger locks the same trx already has on the table */
 
-  for (auto lock = UT_LIST_GET_LAST(table->locks);
-       lock != nullptr;
-       lock = UT_LIST_GET_PREV(un_member.tab_lock.locks, lock)) {
+  for (auto lock = UT_LIST_GET_LAST(table->locks); lock != nullptr; lock = UT_LIST_GET_PREV(un_member.tab_lock.locks, lock)) {
 
     if (lock->trx == trx && lock_mode_stronger_or_eq(lock_get_mode(lock), mode)) {
 
@@ -1039,12 +1029,9 @@ inline Lock *lock_rec_has_expl(ulint precise_mode, const buf_block_t *block, uli
   ut_ad((precise_mode & LOCK_MODE_MASK) == LOCK_S || (precise_mode & LOCK_MODE_MASK) == LOCK_X);
   ut_ad(!(precise_mode & LOCK_INSERT_INTENTION));
 
-  for (auto lock = lock_rec_get_first(block, heap_no);
-       lock != nullptr;
-       lock = lock_rec_get_next(heap_no, lock)) {
+  for (auto lock = lock_rec_get_first(block, heap_no); lock != nullptr; lock = lock_rec_get_next(heap_no, lock)) {
 
-    if (lock->trx == trx &&
-        lock_mode_stronger_or_eq(lock_get_mode(lock), Lock_mode(precise_mode & LOCK_MODE_MASK)) &&
+    if (lock->trx == trx && lock_mode_stronger_or_eq(lock_get_mode(lock), Lock_mode(precise_mode & LOCK_MODE_MASK)) &&
         !lock_get_wait(lock) &&
         (!lock_rec_get_rec_not_gap(lock) || (precise_mode & LOCK_REC_NOT_GAP) || heap_no == PAGE_HEAP_NO_SUPREMUM) &&
         (!lock_rec_get_gap(lock) || (precise_mode & LOCK_GAP) || heap_no == PAGE_HEAP_NO_SUPREMUM) &&
@@ -1067,12 +1054,8 @@ inline Lock *lock_rec_has_expl(ulint precise_mode, const buf_block_t *block, uli
 @param[in] trx                  Transaction, or nullptr if requests by all transactions are taken into account
 @return	lock or nullptr */
 static Lock *lock_rec_other_has_expl_req(
-  Lock_mode mode,
-  ulint gap,
-  ulint wait,
-  const buf_block_t *block,
-  ulint heap_no,
-  const trx_t *trx) {
+  Lock_mode mode, ulint gap, ulint wait, const buf_block_t *block, ulint heap_no, const trx_t *trx
+) {
 
   ut_ad(mutex_own(&kernel_mutex));
   ut_ad(mode == LOCK_X || mode == LOCK_S);
@@ -1083,10 +1066,8 @@ static Lock *lock_rec_other_has_expl_req(
 
   while (lock != nullptr) {
 
-    if (lock->trx != trx &&
-        (gap || !(lock_rec_get_gap(lock) || heap_no == PAGE_HEAP_NO_SUPREMUM)) &&
-	(wait || !lock_get_wait(lock)) &&
-	lock_mode_stronger_or_eq(lock_get_mode(lock), mode)) {
+    if (lock->trx != trx && (gap || !(lock_rec_get_gap(lock) || heap_no == PAGE_HEAP_NO_SUPREMUM)) &&
+        (wait || !lock_get_wait(lock)) && lock_mode_stronger_or_eq(lock_get_mode(lock), mode)) {
 
       return lock;
     }
@@ -1135,7 +1116,6 @@ static Lock *lock_rec_other_has_conflicting(Lock_mode mode, const buf_block_t *b
         lock = lock_rec_get_next(heap_no, lock);
 
       } while (lock != nullptr);
-
     }
   }
 
@@ -1267,7 +1247,7 @@ static
   /* Set the bit corresponding to rec */
   lock_rec_set_nth_bit(lock, heap_no);
 
-  HASH_INSERT(Lock, hash, lock_sys->rec_hash, lock_rec_fold(space, page_no), lock);
+  lock_sys->rec_hash->emplace(Page_id(space, page_no), lock);
 
   if (unlikely(type_mode & LOCK_WAIT)) {
 
@@ -1284,12 +1264,7 @@ ulint type_mode                 Lock mode and wait flag, type is ignored and rep
 @param[in] index                Index of record
 @param[in] trx                  Transaction
 @return	created lock */
-static Lock *lock_rec_create(
-  ulint type_mode,
-  const buf_block_t *block,
-  ulint heap_no,
-  dict_index_t *index,
-  trx_t *trx) {
+static Lock *lock_rec_create(ulint type_mode, const buf_block_t *block, ulint heap_no, dict_index_t *index, trx_t *trx) {
   const page_t *page;
   ulint space;
   ulint n_bits;
@@ -1321,7 +1296,9 @@ Checks for deadlocks.
 DB_SUCCESS; DB_SUCCESS means that there was a deadlock, but another
 transaction was chosen as a victim, and we got the lock immediately:
 no need to wait then */
-static db_err lock_rec_enqueue_waiting(ulint type_mode, const buf_block_t *block, ulint heap_no, dict_index_t *index, que_thr_t *thr) {
+static db_err lock_rec_enqueue_waiting(
+  ulint type_mode, const buf_block_t *block, ulint heap_no, dict_index_t *index, que_thr_t *thr
+) {
   ut_ad(mutex_own(&kernel_mutex));
 
   /* Test if there already is some other reason to suspend thread:
@@ -1492,7 +1469,9 @@ a page supremum record, a gap type lock.
 @param[in] index                Index of record
 @param[in] thr                  Query thread
 @return	true if locking succeeded */
-inline bool lock_rec_lock_fast(bool impl, ulint mode, const buf_block_t *block, ulint heap_no, dict_index_t *index, que_thr_t *thr) {
+inline bool lock_rec_lock_fast(
+  bool impl, ulint mode, const buf_block_t *block, ulint heap_no, dict_index_t *index, que_thr_t *thr
+) {
   ut_ad(mutex_own(&kernel_mutex));
   ut_ad((LOCK_MODE_MASK & mode) != LOCK_S || lock_table_has(thr_get_trx(thr), index->table, LOCK_IS));
   ut_ad((LOCK_MODE_MASK & mode) != LOCK_X || lock_table_has(thr_get_trx(thr), index->table, LOCK_IX));
@@ -1548,7 +1527,9 @@ lock, or in the case of a page supremum record, a gap type lock.
 @param[in] index                Index of record
 @param[in] thr                  Query thread
 @return	DB_SUCCESS, DB_LOCK_WAIT, or error code */
-static db_err lock_rec_lock_slow(bool impl, ulint mode, const buf_block_t *block, ulint heap_no, dict_index_t *index, que_thr_t *thr) {
+static db_err lock_rec_lock_slow(
+  bool impl, ulint mode, const buf_block_t *block, ulint heap_no, dict_index_t *index, que_thr_t *thr
+) {
   ut_ad(mutex_own(&kernel_mutex));
   ut_ad((LOCK_MODE_MASK & mode) != LOCK_S || lock_table_has(thr_get_trx(thr), index->table, LOCK_IS));
   ut_ad((LOCK_MODE_MASK & mode) != LOCK_X || lock_table_has(thr_get_trx(thr), index->table, LOCK_IX));
@@ -1709,7 +1690,7 @@ static void lock_rec_dequeue_from_page(Lock *in_lock) {
   auto space = in_lock->un_member.rec_lock.space;
   auto page_no = in_lock->un_member.rec_lock.page_no;
 
-  HASH_DELETE(Lock, hash, lock_sys->rec_hash, lock_rec_fold(space, page_no), in_lock);
+  lock_sys->rec_hash->erase(Page_id(space, page_no));
 
   UT_LIST_REMOVE(trx->trx_locks, in_lock);
 
@@ -1740,7 +1721,7 @@ static void lock_rec_discard(Lock *in_lock) {
   auto space = in_lock->un_member.rec_lock.space;
   auto page_no = in_lock->un_member.rec_lock.page_no;
 
-  HASH_DELETE(Lock, hash, lock_sys->rec_hash, lock_rec_fold(space, page_no), in_lock);
+  lock_sys->rec_hash->erase(Page_id(space, page_no));
 
   UT_LIST_REMOVE(trx->trx_locks, in_lock);
 }
@@ -1808,7 +1789,8 @@ static void lock_rec_inherit_to_gap(const buf_block_t *heir_block, const buf_blo
   also then. */
 
   while (lock != nullptr) {
-    if (!lock_rec_get_insert_intention(lock) && lock->trx->m_isolation_level != TRX_ISO_READ_COMMITTED && lock_get_mode(lock) == LOCK_X) {
+    if (!lock_rec_get_insert_intention(lock) && lock->trx->m_isolation_level != TRX_ISO_READ_COMMITTED &&
+        lock_get_mode(lock) == LOCK_X) {
 
       lock_rec_add_to_queue(LOCK_REC | LOCK_GAP | lock_get_mode(lock), heir_block, heir_heap_no, lock->index, lock->trx);
     }
@@ -3038,7 +3020,8 @@ static void lock_remove_all_on_table_for_trx(dict_table_t *table, trx_t *trx, bo
       ut_a(!lock_get_wait(lock));
 
       lock_rec_discard(lock);
-    } else if (lock_get_type_low(lock) & LOCK_TABLE && lock->un_member.tab_lock.table == table && (remove_sx_locks || !IS_LOCK_S_OR_X(lock))) {
+    } else if (lock_get_type_low(lock) & LOCK_TABLE && lock->un_member.tab_lock.table == table &&
+               (remove_sx_locks || !IS_LOCK_S_OR_X(lock))) {
 
       ut_a(!lock_get_wait(lock));
 
@@ -3178,12 +3161,7 @@ void lock_rec_print(ib_stream_t ib_stream, const Lock *lock) {
 
   ib_logger(ib_stream, "\n");
 
-  Buf_pool::Request req {
-    .m_page_id = { space, page_no },
-    .m_file = __FILE__,
-    .m_line = __LINE__,
-    .m_mtr = &mtr
-  };
+  Buf_pool::Request req{.m_page_id = {space, page_no}, .m_file = __FILE__, .m_line = __LINE__, .m_mtr = &mtr};
 
   block = srv_buf_pool->try_get_by_page_id(req);
 
@@ -3412,17 +3390,17 @@ loop:
 
       mtr_start(&mtr);
 
-      Buf_pool::Request req {
+      Buf_pool::Request req{
         .m_rw_latch = BUF_GET_NO_LATCH,
-        .m_page_id = { space, page_no },
-	.m_mode = BUF_GET_NO_LATCH,
-	.m_file = __FILE__,
-	.m_line = __LINE__,
-	.m_mtr = &mtr
+        .m_page_id = {space, page_no},
+        .m_mode = BUF_GET_NO_LATCH,
+        .m_file = __FILE__,
+        .m_line = __LINE__,
+        .m_mtr = &mtr
       };
 
       /* We are simply trying to force a read here. */
-      (void) srv_buf_pool->get(req, nullptr);
+      (void)srv_buf_pool->get(req, nullptr);
 
       mtr_commit(&mtr);
 
@@ -3602,9 +3580,9 @@ static bool lock_rec_validate_page(space_id_t space, page_no_t page_no) {
 
   mtr_start(&mtr);
 
-  Buf_pool::Request req {
+  Buf_pool::Request req{
     .m_rw_latch = RW_X_LATCH,
-    .m_page_id = { space, page_no },
+    .m_page_id = {space, page_no},
     .m_mode = BUF_GET,
     .m_file = __FILE__,
     .m_line = __LINE__,
@@ -3636,7 +3614,8 @@ loop:
 
   ut_a(trx_in_trx_list(lock->trx));
   ut_a(
-    lock->trx->m_conc_state == TRX_ACTIVE || lock->trx->m_conc_state == TRX_PREPARED || lock->trx->m_conc_state == TRX_COMMITTED_IN_MEMORY
+    lock->trx->m_conc_state == TRX_ACTIVE || lock->trx->m_conc_state == TRX_PREPARED ||
+    lock->trx->m_conc_state == TRX_COMMITTED_IN_MEMORY
   );
 
 #ifdef UNIV_SYNC_DEBUG
@@ -3761,13 +3740,8 @@ static bool lock_validate() {
 #endif /* UNIV_DEBUG */
 
 db_err lock_rec_insert_check_and_lock(
-  ulint flags,
-  const rec_t *rec,
-  buf_block_t *block,
-  dict_index_t *index,
-  que_thr_t *thr,
-  mtr_t *mtr,
-  bool *inherit) {
+  ulint flags, const rec_t *rec, buf_block_t *block, dict_index_t *index, que_thr_t *thr, mtr_t *mtr, bool *inherit
+) {
 
   const rec_t *next_rec;
   trx_t *trx;
@@ -4195,9 +4169,7 @@ ulint lock_rec_get_page_no(const Lock *lock) {
 bool lock_trx_has_no_waiters(const trx_t *trx) {
   mutex_enter(&kernel_mutex);
 
-  for (auto lock = UT_LIST_GET_LAST(trx->trx_locks);
-       lock != nullptr;
-       lock = UT_LIST_GET_PREV(trx_locks, lock)) {
+  for (auto lock = UT_LIST_GET_LAST(trx->trx_locks); lock != nullptr; lock = UT_LIST_GET_PREV(trx_locks, lock)) {
 
     if (lock_get_type_low(lock) == LOCK_REC) {
 
@@ -4206,8 +4178,7 @@ bool lock_trx_has_no_waiters(const trx_t *trx) {
 
       {
         /* Check for waiting locks. */
-        for (auto rec_lock = lock_rec_get_first_on_page_addr(space, page_no);
-             rec_lock != nullptr;
+        for (auto rec_lock = lock_rec_get_first_on_page_addr(space, page_no); rec_lock != nullptr;
              rec_lock = lock_rec_get_next_on_page(rec_lock)) {
 
           if (lock_get_wait(rec_lock)) {
@@ -4221,8 +4192,7 @@ bool lock_trx_has_no_waiters(const trx_t *trx) {
 
       ut_ad(lock_get_type_low(lock) & LOCK_TABLE);
 
-      for (auto table_lock = UT_LIST_GET_NEXT(un_member.tab_lock.locks, lock);
-           table_lock != nullptr;
+      for (auto table_lock = UT_LIST_GET_NEXT(un_member.tab_lock.locks, lock); table_lock != nullptr;
            table_lock = UT_LIST_GET_NEXT(un_member.tab_lock.locks, table_lock)) {
 
         if (lock_get_wait(table_lock)) {
