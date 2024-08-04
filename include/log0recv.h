@@ -190,16 +190,16 @@ typedef struct recv_addr_struct recv_addr_t;
 /** Hashed page file address struct */
 struct recv_addr_struct {
   /** recovery state of the page */
-  recv_addr_state state;
+  recv_addr_state m_state;
 
   /** space id */
-  space_id_t space;
+  space_id_t m_space;
 
   /** page number */
-  page_no_t page_no;
+  page_no_t m_page_no;
 
   /** list of log records for this page */
-  UT_LIST_BASE_NODE_T(recv_t, rec_list) rec_list;
+  std::vector<recv_t *> m_rec_list;
 
   /** hash node in the hash bucket chain */
   hash_node_t addr_hash;
@@ -207,7 +207,7 @@ struct recv_addr_struct {
 
 /** Recovery system data structure */
 struct recv_sys_t {
-  using addr_hash_t = std::unordered_map<Page_id, recv_addr_t *, Page_id_hash>;
+  using addr_hash_t = std::unordered_map<Page_id, std::shared_ptr<recv_addr_t>, Page_id_hash>;
   /** mutex protecting the fields apply_log_recs, n_addrs, and
   the state field in each recv_addr struct */
   mutex_t mutex;

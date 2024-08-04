@@ -22,6 +22,7 @@ Created 9/20/1997 Heikki Tuuri
 *******************************************************/
 
 #include "log0recv.h"
+#include <memory>
 
 #include "btr0btr.h"
 #include "btr0cur.h"
@@ -819,7 +820,7 @@ inline ulint recv_fold(
 
 /** Gets the hashed file address struct for a page.
 @return	file address struct, nullptr if not found from the hash table */
-static recv_addr_t *recv_get_fil_addr_struct(
+static std::shared_ptr<recv_addr_t> recv_get_fil_addr_struct(
   ulint space, /*!< in: space id */
   ulint page_no
 ) /*!< in: page number */
@@ -845,7 +846,7 @@ static void recv_add_to_hash_table(
   ulint len;
   recv_data_t *recv_data;
   recv_data_t **prev_field;
-  recv_addr_t *recv_addr;
+  std::shared_ptr<recv_addr_t> recv_addr{};
 
   if (srv_fil->tablespace_deleted_or_being_deleted_in_mem(space, -1)) {
     /* The tablespace does not exist any more: do not store the
@@ -866,19 +867,17 @@ static void recv_add_to_hash_table(
   recv_addr = recv_get_fil_addr_struct(space, page_no);
 
   if (recv_addr == nullptr) {
-    recv_addr = reinterpret_cast<recv_addr_t *>(mem_heap_alloc(recv_sys->heap, sizeof(recv_addr_t)));
-
-    recv_addr->space = space;
-    recv_addr->page_no = page_no;
-    recv_addr->state = RECV_NOT_PROCESSED;
-
-    UT_LIST_INIT(recv_addr->rec_list);
+    recv_addr = std::make_shared<recv_addr_t>(recv_addr_t{
+      .m_state = RECV_NOT_PROCESSED,
+      .m_space = space,
+      .m_page_no = page_no,
+    });
 
     recv_sys->addr_hash->emplace(Page_id{space, page_no}, recv_addr);
     recv_sys->n_addrs++;
   }
 
-  UT_LIST_ADD_LAST(recv_addr->rec_list, recv);
+  recv_addr->m_rec_list.emplace_back(recv);
 
   prev_field = &(recv->data);
 
@@ -938,8 +937,7 @@ static void recv_data_copy_to_buf(
 
 void recv_recover_page_func(bool just_read_in, buf_block_t *block) {
   page_t *page;
-  recv_addr_t *recv_addr;
-  recv_t *recv;
+  std::shared_ptr<recv_addr_t> recv_addr{};
   byte *buf;
   uint64_t start_lsn;
   uint64_t end_lsn;
@@ -962,14 +960,14 @@ void recv_recover_page_func(bool just_read_in, buf_block_t *block) {
 
   recv_addr = recv_get_fil_addr_struct(block->get_space(), block->get_page_no());
 
-  if (recv_addr == nullptr || recv_addr->state == RECV_BEING_PROCESSED || recv_addr->state == RECV_PROCESSED) {
+  if (recv_addr == nullptr || recv_addr->m_state == RECV_BEING_PROCESSED || recv_addr->m_state == RECV_PROCESSED) {
 
     mutex_exit(&(recv_sys->mutex));
 
     return;
   }
 
-  recv_addr->state = RECV_BEING_PROCESSED;
+  recv_addr->m_state = RECV_BEING_PROCESSED;
 
   mutex_exit(&(recv_sys->mutex));
 
@@ -1012,9 +1010,7 @@ void recv_recover_page_func(bool just_read_in, buf_block_t *block) {
   modification_to_page = false;
   start_lsn = end_lsn = 0;
 
-  recv = UT_LIST_GET_FIRST(recv_addr->rec_list);
-
-  while (recv) {
+  for (auto recv : recv_addr->m_rec_list) {
     end_lsn = recv->end_lsn;
 
     if (recv->len > RECV_DATA_BLOCK_SIZE) {
@@ -1079,7 +1075,7 @@ void recv_recover_page_func(bool just_read_in, buf_block_t *block) {
     recv_max_page_lsn = page_lsn;
   }
 
-  recv_addr->state = RECV_PROCESSED;
+  recv_addr->m_state = RECV_PROCESSED;
 
   ut_a(recv_sys->n_addrs);
   recv_sys->n_addrs--;
@@ -1108,7 +1104,7 @@ static ulint recv_read_in_area(
   ulint, ulint page_no
 ) /*!< in: page number */
 {
-  recv_addr_t *recv_addr;
+  std::shared_ptr<recv_addr_t> recv_addr;
   ulint page_nos[RECV_READ_AHEAD_AREA];
   ulint low_limit;
   ulint n;
@@ -1124,8 +1120,8 @@ static ulint recv_read_in_area(
 
       mutex_enter(&(recv_sys->mutex));
 
-      if (recv_addr->state == RECV_NOT_PROCESSED) {
-        recv_addr->state = RECV_BEING_READ;
+      if (recv_addr->m_state == RECV_NOT_PROCESSED) {
+        recv_addr->m_state = RECV_BEING_READ;
 
         page_nos[n] = page_no;
 
@@ -1160,11 +1156,11 @@ void recv_apply_hashed_log_recs(bool flush_and_free_pages) {
   recv_sys->apply_batch_on = true;
 
   std::uint64_t i{0};
-  for (auto &[space_id_page_no_pair, recv_addr] : *recv_sys->addr_hash) {
-    auto space_id = recv_addr->space;
-    auto page_no = recv_addr->page_no;
+  for (auto &[page_id, recv_addr] : *recv_sys->addr_hash) {
+    auto space_id = recv_addr->m_space;
+    auto page_no = recv_addr->m_page_no;
 
-    if (recv_addr->state == RECV_NOT_PROCESSED) {
+    if (recv_addr->m_state == RECV_NOT_PROCESSED) {
       if (!has_printed) {
         ut_print_timestamp(ib_stream);
         ib_logger(ib_stream, "Starting an apply batch of log records to the database...");
@@ -1204,7 +1200,6 @@ void recv_apply_hashed_log_recs(bool flush_and_free_pages) {
     }
 
     if (has_printed && i % 100 == 0) {
-
       ib_logger(ib_stream, "%lu ", i);
     }
   }

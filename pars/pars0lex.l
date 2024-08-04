@@ -149,10 +149,10 @@ BOUND_ID	\$[a-z_A-Z0-9]+
 
 "'"		{
 /* Quoted character string literals are handled in an explicit
-start state 'quoted'.  This state is entered and the buffer for
+start m_state 'quoted'.  This m_state is entered and the buffer for
 the scanned string is emptied upon encountering a starting quote.
 
-In the state 'quoted', only two actions are possible (defined below). */
+In the m_state 'quoted', only two actions are possible (defined below). */
 			BEGIN(quoted);
 			stringbuf_len = 0;
 }
@@ -173,7 +173,7 @@ In the state 'quoted', only two actions are possible (defined below). */
 			/* If we got an odd number of quotes, then the
 			last quote we got is the terminating quote.
 			At the end of the string, we return to the
-			initial start state and report the scanned
+			initial start m_state and report the scanned
 			string literal. */
 
 			if (yyleng % 2) {
@@ -186,11 +186,11 @@ In the state 'quoted', only two actions are possible (defined below). */
 }
 
 \"		{
-/* Quoted identifiers are handled in an explicit start state 'id'.
-This state is entered and the buffer for the scanned string is emptied
+/* Quoted identifiers are handled in an explicit start m_state 'id'.
+This m_state is entered and the buffer for the scanned string is emptied
 upon encountering a starting quote.
 
-In the state 'id', only two actions are possible (defined below). */
+In the m_state 'id', only two actions are possible (defined below). */
 			BEGIN(id);
 			stringbuf_len = 0;
 }
@@ -211,7 +211,7 @@ In the state 'id', only two actions are possible (defined below). */
 			/* If we got an odd number of quotes, then the
 			last quote we got is the terminating quote.
 			At the end of the string, we return to the
-			initial start state and report the scanned
+			initial start m_state and report the scanned
 			identifier. */
 
 			if (yyleng % 2) {
