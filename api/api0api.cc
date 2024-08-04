@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vector>
 
 #include "api0api.h"
 #include "api0misc.h"
@@ -35,8 +36,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "pars0pars.h"
 #include "rem0cmp.h"
 #include "row0ins.h"
-#include "row0pread.h"
 #include "row0merge.h"
+#include "row0pread.h"
 #include "row0prebuilt.h"
 #include "row0sel.h"
 #include "row0upd.h"
@@ -75,13 +76,7 @@ static ib_db_format_t db_format;
  * @param p2_len     in: packed key length
  * @return           1, 0, -1, if a is greater, equal, less than b, respectively
  */
-static int ib_default_compare(
-  const ib_col_meta_t *col_meta,
-  const ib_byte_t *p1,
-  ulint p1_len,
-  const ib_byte_t *p2,
-  ulint p2_len
-);
+static int ib_default_compare(const ib_col_meta_t *col_meta, const ib_byte_t *p1, ulint p1_len, const ib_byte_t *p2, ulint p2_len);
 
 ib_client_cmp_t ib_client_compare = ib_default_compare;
 
@@ -114,39 +109,38 @@ struct ib_qry_grph_t {
   /** Innobase SQL query graph used in inserts */
   que_fork_t *ins;
 
-   /** SQL query graph used in updates or deletes */
+  /** SQL query graph used in updates or deletes */
   que_fork_t *upd;
 
-   /* Dummy query graph used in selects */
+  /* Dummy query graph used in selects */
   que_fork_t *sel;
 };
 
 /* Query node types. */
 struct ib_qry_node_t {
-   /** SQL insert node used to perform inserts to the table */
+  /** SQL insert node used to perform inserts to the table */
   ins_node_t *ins;
 
-   /** SQL update node used to perform updates and deletes */
+  /** SQL update node used to perform updates and deletes */
   upd_node_t *upd;
 
-   /** SQL select node used to perform selects on the table */
+  /** SQL select node used to perform selects on the table */
   sel_node_t *sel;
 };
 
 /* Query processing fields. */
 struct ib_qry_proc_t {
-   /** Query node */
+  /** Query node */
   ib_qry_node_t node;
 
   /** Query graph */
   ib_qry_grph_t grph;
-
 };
 
 /* Cursor instance for traversing tables/indexes. This will eventually
 become row_prebuilt_t. */
 struct ib_cursor_t {
-   /** Instance heap */
+  /** Instance heap */
   mem_heap_t *heap;
 
   /** Heap to use for query graphs */
@@ -209,7 +203,7 @@ struct ib_index_def_t {
   bool unique;
 
   /** Vector of columns */
-  ib_vector_t *cols;
+  std::vector<ib_key_col_t *> *cols;
 
   /* User transacton covering the DDL operations */
   trx_t *usr_trx;
@@ -274,11 +268,7 @@ constexpr ulint INNOBASE_WAKE_INTERVAL = 32;
  * @return 1 if a is greater, 0 if equal, -1 if less than b
  */
 static int ib_default_compare(
-  const ib_col_meta_t *ib_col_meta,
-  const ib_byte_t *p1,
-  ulint p1_len,
-  const ib_byte_t *p2,
-  ulint p2_len
+  const ib_col_meta_t *ib_col_meta, const ib_byte_t *p1, ulint p1_len, const ib_byte_t *p2, ulint p2_len
 ) {
   (void)ib_col_meta;
 
@@ -295,10 +285,8 @@ static int ib_default_compare(
 @param[in] pcur                 InnoDB persistent cursor
 @return	true if positioned */
 static bool ib_btr_cursor_is_positioned(const btr_pcur_t *pcur) {
-  return
-    pcur->m_old_stored &&
-    (pcur->m_pos_state == Btr_pcur_positioned::IS_POSITIONED ||
-     pcur->m_pos_state == Btr_pcur_positioned::WAS_POSITIONED);
+  return pcur->m_old_stored &&
+         (pcur->m_pos_state == Btr_pcur_positioned::IS_POSITIONED || pcur->m_pos_state == Btr_pcur_positioned::WAS_POSITIONED);
 }
 
 /** Delays an INSERT, DELETE or UPDATE operation if the purge is lagging. */
@@ -581,7 +569,7 @@ static ib_tpl_t ib_key_tuple_new(const dict_index_t *dict_index, ulint n_cols) {
  * @param heap The memory heap.
  * @return Tuple instance created, or nullptr.
  */
-static ib_tpl_t ib_row_tuple_new_low( const dict_index_t *dict_index, ulint n_cols, mem_heap_t *heap) {
+static ib_tpl_t ib_row_tuple_new_low(const dict_index_t *dict_index, ulint n_cols, mem_heap_t *heap) {
   auto tuple = reinterpret_cast<ib_tuple_t *>(mem_heap_alloc(heap, sizeof(ib_tuple_t)));
 
   if (tuple == nullptr) {
@@ -673,11 +661,7 @@ ib_err_t ib_shutdown(ib_shutdown_t flag) {
   auto err = ib_cfg_shutdown();
 
   if (err != DB_SUCCESS) {
-    ib_logger(
-      ib_stream,
-      "ib_cfg_shutdown(): %s; continuing shutdown anyway\n",
-      ib_strerror(err)
-    );
+    ib_logger(ib_stream, "ib_cfg_shutdown(): %s; continuing shutdown anyway\n", ib_strerror(err));
   }
 
   db_format.id = 0;
@@ -900,9 +884,8 @@ static const ib_col_t *ib_table_find_col(const ib_vector_t *cols, const char *na
  * @param name The column name to find.
  * @return Column definition if found, else nullptr.
  */
-static const ib_key_col_t *ib_index_find_col(ib_vector_t *cols, const char *name) {
-  for (ulint i = 0; i < ib_vector_size(cols); ++i) {
-    auto ib_col = reinterpret_cast<const ib_key_col_t *>(ib_vector_get(cols, i));
+static const ib_key_col_t *ib_index_find_col(const std::vector<ib_key_col_t *> &cols, const char *name) {
+  for (auto ib_col : cols) {
 
     if (ib_utf8_strcasecmp(ib_col->name, name) == 0) {
       return ib_col;
@@ -913,7 +896,8 @@ static const ib_key_col_t *ib_index_find_col(ib_vector_t *cols, const char *name
 }
 
 ib_err_t ib_table_schema_add_col(
-  ib_tbl_sch_t ib_tbl_sch, const char *name, ib_col_type_t ib_col_type, ib_col_attr_t ib_col_attr, uint16_t client_type, ulint len) {
+  ib_tbl_sch_t ib_tbl_sch, const char *name, ib_col_type_t ib_col_type, ib_col_attr_t ib_col_attr, uint16_t client_type, ulint len
+) {
   ib_col_t *ib_col;
   ib_err_t err = DB_SUCCESS;
   ib_table_def_t *table_def = (ib_table_def_t *)ib_tbl_sch;
@@ -980,7 +964,7 @@ ib_err_t ib_table_schema_add_index(ib_tbl_sch_t ib_tbl_sch, const char *name, ib
 
       index_def->name = mem_heap_strdup(heap, name);
 
-      index_def->cols = ib_vector_create(heap, 8);
+      index_def->cols = new std::vector<ib_key_col_t *>();
 
       ib_vector_push(table_def->indexes, index_def);
 
@@ -1093,11 +1077,12 @@ static void ib_normalize_table_name(char *norm_name, const char *name) {
  * @param name The table name to check.
  * @return DB_SUCCESS or err code.
  */
-static ib_err_t ib_table_name_check(const char *name)  {
+static ib_err_t ib_table_name_check(const char *name) {
   const char *slash = nullptr;
   ulint len = strlen(name);
 
-  if (len < 2 || *name == '/' || name[len - 1] == '/' || (name[0] == '.' && name[1] == '/') || (name[0] == '.' && name[1] == '.' && name[2] == '/')) {
+  if (len < 2 || *name == '/' || name[len - 1] == '/' || (name[0] == '.' && name[1] == '/') ||
+      (name[0] == '.' && name[1] == '.' && name[2] == '/')) {
 
     return DB_DATA_MISMATCH;
   }
@@ -1257,7 +1242,7 @@ ib_err_t ib_index_schema_add_col(ib_idx_sch_t ib_idx_sch, const char *name, ulin
   IB_CHECK_PANIC();
 
   /* Check for duplicates. */
-  if (ib_index_find_col(index_def->cols, name) != nullptr) {
+  if (ib_index_find_col(*index_def->cols, name) != nullptr) {
     err = DB_COL_APPEARS_TWICE_IN_INDEX;
     /* Check if the column exists in the table definition. */
   } else if (ib_index_get_col_no(index_def, name) == -1) {
@@ -1278,7 +1263,7 @@ ib_err_t ib_index_schema_add_col(ib_idx_sch_t ib_idx_sch, const char *name, ulin
       ib_col->name = mem_heap_strdup(heap, name);
       ib_col->prefix_len = prefix_len;
 
-      ib_vector_push(index_def->cols, ib_col);
+      index_def->cols->emplace_back(ib_col);
     }
   }
 
@@ -1333,7 +1318,7 @@ ib_err_t ib_index_schema_create(ib_trx_t ib_usr_trx, const char *name, const cha
 
         index_def->name = mem_heap_strdup(heap, name);
 
-        index_def->cols = ib_vector_create(heap, 8);
+        index_def->cols = new std::vector<ib_key_col_t *>();
 
         index_def->usr_trx = (trx_t *)ib_usr_trx;
 
@@ -1462,7 +1447,7 @@ static const index_def_t *ib_copy_index_definition(ib_index_def_t *ib_index_def,
   }
 
   index_def->name = index_name;
-  index_def->n_fields = ib_vector_size(ib_index_def->cols);
+  index_def->n_fields = ib_index_def->cols->size();
 
   if (ib_index_def->unique) {
     index_def->ind_type = DICT_UNIQUE;
@@ -1476,8 +1461,8 @@ static const index_def_t *ib_copy_index_definition(ib_index_def_t *ib_index_def,
 
   index_def->fields = (index_field_t *)mem_heap_zalloc(ib_index_def->heap, sizeof(index_field_t) * index_def->n_fields);
 
-  for (ulint i = 0; i < ib_vector_size(ib_index_def->cols); ++i) {
-    auto ib_col = static_cast<ib_key_col_t *>(ib_vector_get(ib_index_def->cols, i));
+  for (ulint i = 0; i < ib_index_def->cols->size(); ++i) {
+    auto ib_col = ib_index_def->cols->at(i);
 
     index_def->fields[i].field_name = ib_col->name;
     index_def->fields[i].prefix_len = ib_col->prefix_len;
@@ -1497,11 +1482,7 @@ static const index_def_t *ib_copy_index_definition(ib_index_def_t *ib_index_def,
  * @return DB_SUCCESS or err code.
  */
 static ib_err_t ib_build_secondary_index(
-  trx_t *usr_trx,
-  dict_table_t *table,
-  ib_index_def_t *ib_index_def,
-  bool create,
-  dict_index_t **dict_index
+  trx_t *usr_trx, dict_table_t *table, ib_index_def_t *ib_index_def, bool create, dict_index_t **dict_index
 ) {
   ib_err_t err;
   trx_t *ddl_trx;
@@ -1674,7 +1655,7 @@ static index_def_t *ib_table_create_index_defs(trx_t *trx, const dict_table_t *t
 static ib_err_t ib_create_cluster_index(trx_t *trx, dict_table_t *table, ib_index_def_t *ib_index_def, dict_index_t **dict_index) {
   IB_CHECK_PANIC();
 
-  ut_a(!ib_vector_is_empty(ib_index_def->cols));
+  ut_a(!ib_index_def->cols->empty());
 
   /* Set the CLUSTERED flag to true. */
   auto index_def = ib_copy_index_definition(ib_index_def, true);
@@ -1742,11 +1723,7 @@ static ib_err_t ib_table_clone_indexes(trx_t *trx, dict_table_t *src_table, dict
  * @return DB_SUCCESS or error code
  */
 static ib_err_t ib_table_clone(
-  trx_t *trx,
-  dict_table_t *src_table,
-  dict_table_t **new_table,
-  ib_index_def_t *ib_index_def,
-  mem_heap_t *heap
+  trx_t *trx, dict_table_t *src_table, dict_table_t **new_table, ib_index_def_t *ib_index_def, mem_heap_t *heap
 ) {
   ib_err_t err;
   const index_def_t *index_def;
@@ -1798,7 +1775,7 @@ static ib_err_t ib_table_copy(trx_t *trx, dict_table_t *src_table, dict_table_t 
   }
 
   auto n_indexes = UT_LIST_GET_LEN(dst_table->indexes);
-  auto indexes = reinterpret_cast<dict_index_t **>(mem_heap_zalloc(heap, n_indexes * sizeof(dict_index_t*)));
+  auto indexes = reinterpret_cast<dict_index_t **>(mem_heap_zalloc(heap, n_indexes * sizeof(dict_index_t *)));
   auto dict_index = dict_table_get_first_index(dst_table);
 
   n_indexes = 0;
@@ -1814,7 +1791,7 @@ static ib_err_t ib_table_copy(trx_t *trx, dict_table_t *src_table, dict_table_t 
   ut_a(err == DB_SUCCESS || err == DB_SCHEMA_NOT_LOCKED);
 
   /* Build the actual indexes. */
-  return  row_merge_build_indexes(trx, src_table, dst_table, indexes, n_indexes, nullptr);
+  return row_merge_build_indexes(trx, src_table, dst_table, indexes, n_indexes, nullptr);
 }
 
 /**
@@ -1888,7 +1865,7 @@ static ib_err_t ib_create_indexes(trx_t *ddl_trx, dict_table_t *table, ib_vector
   for (ulint i = 0; err == DB_SUCCESS && i < n_indexes; ++i) {
     auto ib_index_def = static_cast<ib_index_def_t *>(ib_vector_get(indexes, i));
 
-    ut_a(!ib_vector_is_empty(ib_index_def->cols));
+    ut_a(!ib_index_def->cols->empty());
 
     if (!ib_index_def->clustered) {
       /* Since this is part of CREATE TABLE, set the create flag to true. */
@@ -1963,7 +1940,7 @@ ib_err_t ib_table_create(ib_trx_t ib_trx, const ib_tbl_sch_t ib_tbl_sch, ib_id_t
     ib_index_def = static_cast<ib_index_def_t *>(ib_vector_get(table_def->indexes, i));
 
     /* Check that the index definition has at least one column. */
-    if (ib_vector_is_empty(ib_index_def->cols)) {
+    if (ib_index_def->cols->empty()) {
       return DB_SCHEMA_ERROR;
     }
 
@@ -2105,7 +2082,7 @@ static ib_err_t ib_create_primary_index(ib_idx_sch_t ib_idx_sch, ib_id_t *index_
 
   trx_set_dict_operation(usr_trx, TRX_DICT_OP_TABLE);
 
-  ut_a(!ib_vector_is_empty(ib_index_def->cols));
+  ut_a(!ib_index_def->cols->empty());
 
   /* Set the CLUSTERED flag to true. */
   ib_copy_index_definition(ib_index_def, true);
@@ -2153,7 +2130,7 @@ static ib_err_t ib_create_primary_index(ib_idx_sch_t ib_idx_sch, ib_id_t *index_
  *
  * @return DB_SUCCESS or err code
  */
-static ib_err_t ib_create_secondary_index( ib_idx_sch_t ib_idx_sch, ib_id_t *index_id) {
+static ib_err_t ib_create_secondary_index(ib_idx_sch_t ib_idx_sch, ib_id_t *index_id) {
   dict_index_t *dict_index = nullptr;
   trx_t *ddl_trx = nullptr;
   ib_index_def_t *ib_index_def = (ib_index_def_t *)ib_idx_sch;
@@ -2846,8 +2823,8 @@ static ib_err_t ib_calc_diff(ib_cursor_t *cursor, upd_t *upd, const ib_tuple_t *
     }
 
     if (dfield_get_len(new_dfield) != dfield_get_len(old_dfield) ||
-       (!dfield_is_null(old_dfield) &&
-       memcmp(dfield_get_data(new_dfield), dfield_get_data(old_dfield), dfield_get_len(old_dfield)) != 0)) {
+        (!dfield_is_null(old_dfield) &&
+         memcmp(dfield_get_data(new_dfield), dfield_get_data(old_dfield), dfield_get_len(old_dfield)) != 0)) {
 
       auto upd_field = &upd->fields[n_changed];
 
@@ -3278,8 +3255,7 @@ ib_err_t ib_cursor_moveto(ib_crsr_t ib_crsr, ib_tpl_t ib_tpl, ib_srch_mode_t ib_
 
   ut_a(prebuilt->select_lock_type <= LOCK_NUM);
 
-  auto err = row_search_for_client(
-    srv_force_recovery, ib_srch_mode, prebuilt, (ib_match_t)cursor->match_mode, ROW_SEL_MOVETO);
+  auto err = row_search_for_client(srv_force_recovery, ib_srch_mode, prebuilt, (ib_match_t)cursor->match_mode, ROW_SEL_MOVETO);
 
   *result = prebuilt->result;
 
@@ -3333,13 +3309,9 @@ static dfield_t *ib_col_get_dfield(
 @return	true or false */
 static bool ib_col_is_capped(const dtype_t *dtype) /* in: column type */
 {
-  return dtype_get_len(dtype) > 0 &&
-	  (dtype_get_mtype(dtype) == DATA_VARCHAR ||
-           dtype_get_mtype(dtype) == DATA_CHAR ||
-	   dtype_get_mtype(dtype) == DATA_CLIENT ||
-           dtype_get_mtype(dtype) == DATA_VARCLIENT ||
-	   dtype_get_mtype(dtype) == DATA_FIXBINARY ||
-           dtype_get_mtype(dtype) == DATA_BINARY);
+  return dtype_get_len(dtype) > 0 && (dtype_get_mtype(dtype) == DATA_VARCHAR || dtype_get_mtype(dtype) == DATA_CHAR ||
+                                      dtype_get_mtype(dtype) == DATA_CLIENT || dtype_get_mtype(dtype) == DATA_VARCLIENT ||
+                                      dtype_get_mtype(dtype) == DATA_FIXBINARY || dtype_get_mtype(dtype) == DATA_BINARY);
 }
 
 ib_err_t ib_col_set_value(ib_tpl_t ib_tpl, ulint col_no, const void *s, ulint len) {
@@ -4137,7 +4109,7 @@ ib_err_t ib_database_drop(const char *dbname) {
   return err;
 }
 
-bool ib_cursor_is_positioned(const ib_crsr_t ib_crsr)  {
+bool ib_cursor_is_positioned(const ib_crsr_t ib_crsr) {
   const ib_cursor_t *cursor = (const ib_cursor_t *)ib_crsr;
   const row_prebuilt_t *prebuilt = cursor->prebuilt;
 
@@ -4482,7 +4454,9 @@ static int ib_table_schema_visit_table_columns(const dict_table_t *table, ib_sch
  *
  * @return return value from index_col
  */
-static int ib_table_schema_visit_index_columns(const dict_index_t *dict_index, ib_schema_visitor_t::index_col_t index_col, void *arg) {
+static int ib_table_schema_visit_index_columns(
+  const dict_index_t *dict_index, ib_schema_visitor_t::index_col_t index_col, void *arg
+) {
   ulint n_index_cols = dict_index->n_user_defined_cols;
 
   for (ulint i = 0; i < n_index_cols; ++i) {
@@ -4877,7 +4851,7 @@ ib_err_t ib_parallel_select_count_star(ib_trx_t ib_trx, std::vector<ib_crsr_t> &
   ut_a(n_threads > 1);
   ut_a(!ib_crsrs.empty());
 
-  auto trx = reinterpret_cast<trx_t*>(ib_trx);
+  auto trx = reinterpret_cast<trx_t *>(ib_trx);
 
   ut::Sharded_counter<Parallel_reader::MAX_THREADS> n_recs{};
 
@@ -4887,7 +4861,7 @@ ib_err_t ib_parallel_select_count_star(ib_trx_t ib_trx, std::vector<ib_crsr_t> &
 
   dberr_t err{DB_SUCCESS};
   Parallel_reader reader(n_threads);
-  std::vector<dict_table_t*> tables{};
+  std::vector<dict_table_t *> tables{};
 
   for (auto &ib_crsr : ib_crsrs) {
     auto cursor = reinterpret_cast<ib_cursor_t *>(ib_crsr);
@@ -4913,14 +4887,15 @@ ib_err_t ib_parallel_select_count_star(ib_trx_t ib_trx, std::vector<ib_crsr_t> &
     ut_a(n_threads > 0);
 
     log_warn(
-        "Resource not available to create threads for parallel scan."
-        " Falling back to single thread mode.");
+      "Resource not available to create threads for parallel scan."
+      " Falling back to single thread mode."
+    );
 
     err = reader.run(0);
   }
 
   if (err == DB_SUCCESS) {
-     n_rows = n_recs.value();
+    n_rows = n_recs.value();
   }
 
   return err;
@@ -5002,8 +4977,13 @@ static dberr_t check_table(trx_t *trx, dict_index_t *index, size_t n_threads) {
         prev_tuple->print(dtuple_os);
         rec_print(rec_os, rec, index);
 
-        log_err(std::format("Index records in a wrong order in index {} of table {}: {}, {}",
-                            index->name, index->table->name, dtuple_os.str(), rec_os.str()));
+        log_err(std::format(
+          "Index records in a wrong order in index {} of table {}: {}, {}",
+          index->name,
+          index->table->name,
+          dtuple_os.str(),
+          rec_os.str()
+        ));
 
         /* Continue reading */
       } else if (dict_index_is_unique(index) && !contains_null &&
@@ -5016,8 +4996,9 @@ static dberr_t check_table(trx_t *trx, dict_index_t *index, size_t n_threads) {
         rec_print(rec_os, rec, index);
         prev_tuple->print(dtuple_os);
 
-        log_err(std::format("Duplicate key in {} of table {}: {}, {}",
-                 index->name, index->table->name, dtuple_os.str(), rec_os.str()));
+        log_err(
+          std::format("Duplicate key in {} of table {}: {}, {}", index->name, index->table->name, dtuple_os.str(), rec_os.str())
+        );
       }
     }
 
@@ -5067,7 +5048,7 @@ static dberr_t check_table(trx_t *trx, dict_index_t *index, size_t n_threads) {
 }
 
 ib_err_t ib_check_table(ib_trx_t *ib_trx, ib_crsr_t ib_crsr, size_t n_threads) {
-  auto trx = reinterpret_cast<trx_t*>(ib_trx);
+  auto trx = reinterpret_cast<trx_t *>(ib_trx);
   auto cursor = reinterpret_cast<ib_cursor_t *>(ib_crsr);
   auto prebuilt = cursor->prebuilt;
   auto index = prebuilt->index;
@@ -5085,8 +5066,7 @@ ib_err_t ib_check_table(ib_trx_t *ib_trx, ib_crsr_t ib_crsr, size_t n_threads) {
     return DB_DDL_IN_PROGRESS;
   }
 
-  if (trx->m_isolation_level > TRX_ISO_READ_UNCOMMITTED &&
-      prebuilt->select_lock_type == LOCK_NONE && index->is_clustered() &&
+  if (trx->m_isolation_level > TRX_ISO_READ_UNCOMMITTED && prebuilt->select_lock_type == LOCK_NONE && index->is_clustered() &&
       trx->client_n_tables_locked == 0) {
     n_threads = Parallel_reader::available_threads(n_threads, false);
 
