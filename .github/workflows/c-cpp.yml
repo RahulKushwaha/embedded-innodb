@@ -17,7 +17,7 @@ jobs:
       - name: Install CMake
         run: |
           apt update -y
-          apt install -y cmake
+          apt install -y cmake liburing2 sudo
         shell: bash
       - name: liburing
         run: git config --global --add safe.directory /__w/embedded-innodb/embedded-innodb && git submodule update --init --recursive
@@ -25,3 +25,5 @@ jobs:
         run: cmake -G "Unix Makefiles" .
       - name: make
         run: make
+      - name: Test Recovery
+        run: bin/ib_recover
