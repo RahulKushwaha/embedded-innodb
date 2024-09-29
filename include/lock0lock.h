@@ -29,24 +29,19 @@ Created 5/7/1996 Heikki Tuuri
 #include "buf0types.h"
 #include "dict0dict.h"
 #include "dict0types.h"
-#include "hash0hash.h"
 #include "innodb0types.h"
 #include "lock0types.h"
 #include "log0recv.h"
-#include "mtr0types.h"
-#include "page0cur.h"
 #include "page0page.h"
 #include "que0que.h"
 #include "que0types.h"
 #include "read0read.h"
-#include "read0types.h"
 #include "rem0types.h"
 #include "row0row.h"
 #include "row0vers.h"
 #include "srv0srv.h"
 #include "sync0sync.h"
 #include "trx0sys.h"
-#include "trx0trx.h"
 #include "trx0types.h"
 
 #ifdef UNIV_DEBUG
@@ -652,7 +647,7 @@ struct lock_op_struct {
 
 /** The lock system struct */
 struct lock_sys_t {
-  hash_table_t *rec_hash; /*!< hash table of the record locks */
+  std::unordered_map<Page_id, Lock*, Page_id_hash> *rec_hash; /*!< hash table of the record locks */
 };
 
 /** The lock system */
@@ -677,7 +672,7 @@ inline ulint lock_rec_hash(
   ulint page_no
 ) /*!< in: page number */
 {
-  return (hash_calc_hash(lock_rec_fold(space, page_no), lock_sys->rec_hash));
+  return Page_id_hash()(Page_id(space, page_no));
 }
 
 /**

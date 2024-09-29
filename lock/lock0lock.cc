@@ -488,7 +488,7 @@ ulint lock_sec_rec_cons_read_sees(const rec_t *rec, const read_view_t *view) {
 void lock_sys_create(ulint n_cells) {
   lock_sys = static_cast<lock_sys_t *>(mem_alloc(sizeof(lock_sys_t)));
 
-  lock_sys->rec_hash = hash_create(n_cells);
+  lock_sys->rec_hash = new std::unordered_map<Page_id, Lock*, Page_id_hash>();
 
   /* hash_create_mutexes(lock_sys->rec_hash, 2, SYNC_REC_LOCK); */
 
@@ -503,7 +503,7 @@ void lock_sys_close() {
   }
 
   /* hash_free_mutexes(lock_sys->rec_hash); */
-  hash_table_free(lock_sys->rec_hash);
+  delete lock_sys->rec_hash;
   lock_sys->rec_hash = nullptr;
 
   if (lock_latest_err_stream != nullptr) {
@@ -840,18 +840,8 @@ inline Lock *lock_rec_get_next_on_page(Lock *lock) {
   auto space = lock->un_member.rec_lock.space;
   auto page_no = lock->un_member.rec_lock.page_no;
 
-  for (;;) {
-    lock = static_cast<Lock *>(HASH_GET_NEXT(hash, lock));
-
-    if (!lock) {
-
-      break;
-    }
-
-    if ((lock->un_member.rec_lock.space == space) && (lock->un_member.rec_lock.page_no == page_no)) {
-
-      break;
-    }
+  if (const auto it = lock_sys->rec_hash->find(Page_id(space, page_no)); it != lock_sys->rec_hash->end()) {
+    lock = it->second;
   }
 
   return lock;
@@ -863,10 +853,8 @@ file address.
 inline Lock *lock_rec_get_first_on_page_addr(space_id_t space, page_no_t page_no) {
   ut_ad(mutex_own(&kernel_mutex));
 
-  for (auto lock = static_cast<Lock *>(HASH_GET_FIRST(lock_sys->rec_hash, lock_rec_hash(space, page_no)));
-       lock != nullptr;
-       lock = static_cast<Lock *>(HASH_GET_NEXT(hash, lock))) {
-
+  if (auto it = lock_sys->rec_hash->find(Page_id(space, page_no)); it != lock_sys->rec_hash->end()) {
+    auto lock = it->second;
     if ((lock->un_member.rec_lock.space == space) && (lock->un_member.rec_lock.page_no == page_no)) {
       return lock;
     }
@@ -893,12 +881,9 @@ inline Lock *lock_rec_get_first_on_page(const buf_block_t *block) {
 
   const auto space = block->get_space();
   const auto page_no = block->get_page_no();
-  auto hash = buf_block_get_lock_hash_val(block);
 
-  for (auto lock = static_cast<Lock *>(HASH_GET_FIRST(lock_sys->rec_hash, hash));
-       lock != nullptr;
-       lock = static_cast<Lock *>(HASH_GET_NEXT(hash, lock))) {
-
+  if (auto it = lock_sys->rec_hash->find(Page_id(space, page_no)); it != lock_sys->rec_hash->end()) {
+    auto lock = it->second;
     if (lock->un_member.rec_lock.space == space && lock->un_member.rec_lock.page_no == page_no) {
       return lock;
     }
@@ -1259,7 +1244,7 @@ static
   /* Set the bit corresponding to rec */
   lock_rec_set_nth_bit(lock, heap_no);
 
-  HASH_INSERT(Lock, hash, lock_sys->rec_hash, lock_rec_fold(space, page_no), lock);
+  lock_sys->rec_hash->emplace(Page_id(space, page_no), lock);
 
   if (unlikely(type_mode & LOCK_WAIT)) {
 
@@ -1695,7 +1680,7 @@ static void lock_rec_dequeue_from_page(Lock *in_lock) {
   auto space = in_lock->un_member.rec_lock.space;
   auto page_no = in_lock->un_member.rec_lock.page_no;
 
-  HASH_DELETE(Lock, hash, lock_sys->rec_hash, lock_rec_fold(space, page_no), in_lock);
+  lock_sys->rec_hash->erase(Page_id(space, page_no));
 
   UT_LIST_REMOVE(trx->trx_locks, in_lock);
 
@@ -1726,7 +1711,7 @@ static void lock_rec_discard(Lock *in_lock) {
   auto space = in_lock->un_member.rec_lock.space;
   auto page_no = in_lock->un_member.rec_lock.page_no;
 
-  HASH_DELETE(Lock, hash, lock_sys->rec_hash, lock_rec_fold(space, page_no), in_lock);
+  lock_sys->rec_hash->erase(Page_id(space, page_no));
 
   UT_LIST_REMOVE(trx->trx_locks, in_lock);
 }
@@ -3150,16 +3135,7 @@ static ulint lock_get_n_rec_locks() {
 
   ut_ad(mutex_own(&kernel_mutex));
 
-  for (ulint i = 0; i < hash_get_n_cells(lock_sys->rec_hash); i++) {
-
-    auto lock = (Lock *)HASH_GET_FIRST(lock_sys->rec_hash, i);
-
-    while (lock) {
-      n_locks++;
-
-      lock = (Lock *)HASH_GET_NEXT(hash, lock);
-    }
-  }
+  n_locks = lock_sys->rec_hash->size();
 
   return n_locks;
 }
@@ -3623,8 +3599,6 @@ static bool lock_validate() {
   uint64_t limit;
   ulint space;
   ulint page_no;
-  ulint i;
-
   lock_mutex_enter_kernel();
 
   auto trx = UT_LIST_GET_FIRST(srv_trx_sys->m_trx_list);
@@ -3644,12 +3618,11 @@ static bool lock_validate() {
     trx = UT_LIST_GET_NEXT(trx_list, trx);
   }
 
-  for (i = 0; i < hash_get_n_cells(lock_sys->rec_hash); i++) {
-
+  for(auto it = lock_sys->rec_hash->begin(); it != lock_sys->rec_hash->end(); it++) {
     limit = 0;
 
     for (;;) {
-      lock = (Lock *)HASH_GET_FIRST(lock_sys->rec_hash, i);
+      lock = it->second;
 
       while (lock != nullptr) {
         ut_a(srv_trx_sys->in_trx_list(lock->trx));
@@ -3661,7 +3634,6 @@ static bool lock_validate() {
           break;
         }
 
-        lock = (Lock *)HASH_GET_NEXT(hash, lock);
       }
 
       if (!lock) {
