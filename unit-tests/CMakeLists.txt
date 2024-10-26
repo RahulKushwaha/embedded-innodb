@@ -1,5 +1,5 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.5 FATAL_ERROR)
-
+#add_definitions(-DUNIV_BTR_PRINT=1)
 PROJECT (UNIT_TESTS)
 
 SET(LIBS innodb pthread m uring)
@@ -13,3 +13,9 @@ ADD_EXECUTABLE(test_lock test_lock.cc unit-test.cc)
 LINK_DIRECTORIES(${EMBEDDED_INNODB})
 
 TARGET_LINK_LIBRARIES(test_lock PRIVATE ${LIBS})
+
+ADD_EXECUTABLE(test_btree test_btree.cc unit-test.cc)
+
+LINK_DIRECTORIES(${EMBEDDED_INNODB})
+
+TARGET_LINK_LIBRARIES(test_btree PRIVATE ${LIBS})
