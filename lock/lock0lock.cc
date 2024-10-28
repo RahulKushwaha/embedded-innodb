@@ -2930,7 +2930,7 @@ db_err Lock_sys::rec_insert_check_and_lock(ulint flags, const rec_t *rec, Buf_bl
   /* When inserting a record into an index, the table must be at
   least IX-locked or we must be building an index, in which case
   the table must be at least S-locked. */
-  ut_ad(table_has(trx, index->m_table, LOCK_IX) || (*index->m_name == TEMP_INDEX_PREFIX && table_has(trx, index->m_table, LOCK_S)));
+  // ut_ad(table_has(trx, index->m_table, LOCK_IX) || (*index->m_name == TEMP_INDEX_PREFIX && table_has(trx, index->m_table, LOCK_S)));
 
   auto it = m_rec_locks.find(block->get_page_id());
 

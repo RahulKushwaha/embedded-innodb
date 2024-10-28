@@ -1687,13 +1687,13 @@ void Btree::discard_page(Btree_cursor *btr_cur, mtr_t *mtr) noexcept{
   ut_ad(check_node_ptr(index, merge_block, mtr));
 }
 
-#ifdef UNIV_BTR_PRINT
+// #ifdef UNIV_BTR_PRINT
 void Btree::print_size(Index *index) noexcept {
   mtr_t mtr;
 
   mtr.start();
 
-  const auto root = root_get(index, &mtr);
+  const auto root = root_get(index->m_page_id, &mtr);
   const auto seg = root + PAGE_HEADER + PAGE_BTR_SEG_TOP;
 
   log_info("NON-LEAF PAGE SEGMENT");
@@ -1763,7 +1763,7 @@ void Btree::print_index(Index *index, ulint width) noexcept {
 
   mtr.start();
 
-  const auto root = root_block_get(index, &mtr);
+  const auto root = root_block_get(index->m_page_id, &mtr);
 
   print_recursive(index, root, width, &heap, &offsets, &mtr);
 
@@ -1775,7 +1775,7 @@ void Btree::print_index(Index *index, ulint width) noexcept {
 
   ut_ad(validate_index(index, nullptr));
 }
-#endif /* UNIV_BTR_PRINT */
+// #endif /* UNIV_BTR_PRINT */
 
 #ifdef UNIV_DEBUG
 bool Btree::check_node_ptr(Index *index, Buf_block *block, mtr_t *mtr) noexcept {
